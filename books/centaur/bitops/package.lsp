@@ -138,6 +138,7 @@
     unsigned-byte-p-of-logapp
     unsigned-byte-p-of-logrev
 
+    logcount-position
     ))
 
 
