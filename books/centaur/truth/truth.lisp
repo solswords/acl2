@@ -1748,7 +1748,54 @@
                  ((< (nfix k) (nfix n)) (env-lookup (+ 1 (nfix k)) env))
                  ((eql (nfix k) (nfix n)) (env-lookup m env))
                  (t (env-lookup k env))))
-    :hints(("Goal" :in-theory (enable* arith-equiv-forwarding)))))
+    :hints(("Goal" :in-theory (enable* arith-equiv-forwarding))))
+
+  (local (defthm install-bit-redef
+           (equal (install-bit n bit val)
+                  (logapp n val (logapp 1 (bfix bit) (logtail (+ 1 (nfix n))
+                                                              val))))
+           :hints ((logbitp-reasoning))))
+  
+  (local (encapsulate nil
+           (defthm lemma4
+             (equal (logapp 1 (bool->bit (logbitp n x)) y)
+                    (logapp 1 (logtail n x) y))
+             :hints ((logbitp-reasoning)))
+
+           (defthm lemma1
+             (EQUAL (LOGAPP M (NFIX ENV)
+                            (LOGAPP 1 (LOGTAIL M (NFIX ENV))
+                                    (LOGTAIL (+ 1 (NFIX M)) (NFIX ENV))))
+                    (NFIX ENV))
+             :hints ((logbitp-reasoning)))
+
+           (defthm lemma2
+             (implies (and (natp n)
+                           (< (nfix m) n))
+                      (equal (LOGAPP 1 (LOGTAIL (+ 1 (NFIX M)) (NFIX ENV))
+                                     (LOGAPP (+ -1 N (- (NFIX M)))
+                                             (LOGTAIL (+ 2 (NFIX M)) (NFIX ENV))
+                                             x))
+                             (LOGAPP (+ N (- (NFIX M)))
+                                     (LOGTAIL (+ 1 (NFIX M)) (NFIX ENV))
+                                     x)))
+             :hints ((logbitp-reasoning)))))
+
+  
+  (defretd env-move-var-up-arith
+    (implies (<= (nfix m) (nfix n))
+             (equal perm-env
+                    (let ((env (nfix env)))
+                      (logapp m env
+                              (logapp (- (nfix n) (nfix m))
+                                      (logtail (+ 1 (nfix m)) env)
+                                      (logapp 1 (logbit m env)
+                                              (logtail (+ 1 (nfix n)) env)))))))
+    :hints(("Goal" :in-theory (e/d* (arith-equiv-forwarding
+                                     env-update env-lookup)
+                                    ((:d env-move-var-up)))
+            :induct <call>
+            :expand <call>))))
 
 
 (define env-move-var-down ((m natp) (n natp) (env natp))
@@ -1773,7 +1820,91 @@
                  ((> (nfix k) (nfix n)) (env-lookup (+ -1 (nfix k)) env))
                  ((eql (nfix k) (nfix n)) (env-lookup m env))
                  (t (env-lookup k env))))
-    :hints(("Goal" :in-theory (enable* arith-equiv-forwarding)))))
+    :hints(("Goal" :in-theory (enable* arith-equiv-forwarding))))
+
+  (local (defthm install-bit-redef
+           (equal (install-bit n bit val)
+                  (logapp n val (logapp 1 (bfix bit) (logtail (+ 1 (nfix n))
+                                                              val))))
+           :hints ((logbitp-reasoning))))
+           
+  (local (defthm logapp-right-assoc-casesplit
+           (equal (logapp w1 (logapp w2 a b) c)
+                  (if (<= (nfix w1) (nfix w2))
+                      (logapp w1 a c)
+                    (logapp w2 a
+                            (logapp (- (nfix w1) (nfix w2)) b c))))
+           :hints ((logbitp-reasoning))))
+
+  (local
+   (encapsulate nil
+     (local (defthm blah
+              (implies (equal a (+ b c d))
+                       (equal (+ b c) (- a d)))))
+     
+     (defthm lemma4
+       (equal (logapp 1 (bool->bit (logbitp n x)) y)
+              (logapp 1 (logtail n x) y))
+       :hints ((logbitp-reasoning)))
+     
+     (defthm lemma1
+       (implies (and (natp m)
+                     (< (nfix n) (+ -1 m)))
+                (equal (LOGAPP (+ -1 M (- (NFIX N)))
+                               (LOGTAIL N (NFIX ENV))
+                               (LOGAPP 1
+                                       (logtail (+ -1 M) (NFIX ENV))
+                                       (LOGTAIL (+ 1 M) (NFIX ENV))))
+                       (LOGAPP (+ M (- (NFIX N)))
+                               (LOGTAIL N (NFIX ENV))
+                               (LOGTAIL (+ 1 M) (NFIX ENV)))))
+       :hints ((logbitp-reasoning)
+               (and stable-under-simplificationp
+                    '(:in-theory (enable* arith-equiv-forwarding)))))
+
+     (defthm lemma2
+       (EQUAL (LOGAPP M (NFIX ENV)
+                      (LOGAPP 1 (logtail M (NFIX ENV))
+                              (LOGTAIL (+ 1 (NFIX M)) (NFIX ENV))))
+              (NFIX ENV))
+       :hints ((logbitp-reasoning)))
+
+     (defthm lemma3
+       (implies (equal (nfix n) (+ -1 m))
+                (equal (+ m (- (nfix n))) 1)))
+
+     
+     ;; (defthm lemma3
+     ;;   (implies (and (natp m)
+     ;;                 (EQUAL (NFIX N) (+ -1 M)))
+     ;;            (EQUAL (LOGAPP (+ M (- (NFIX N)))
+     ;;                           (LOGTAIL N (NFIX ENV))
+     ;;                           (LOGTAIL (+ 1 M) (NFIX ENV)))
+     ;;                   (LOGAPP 1 (BOOL->BIT (LOGBITP N (NFIX ENV)))
+     ;;                           (LOGTAIL (+ 1 M) (NFIX ENV)))))
+     ;;   :hints ((and stable-under-simplificationp
+     ;;                '(:in-theory (enable* arith-equiv-forwarding)))
+     ;;           (logbitp-reasoning)
+     ;;           (and stable-under-simplificationp
+     ;;                '(:in-theory (enable* arith-equiv-forwarding)))))
+     ))
+  
+  (local (in-theory (enable bitops::logtail-of-logapp-split)))
+  
+  (defretd env-move-var-down-arith
+    (implies (<= (nfix n) (nfix m))
+             (equal perm-env
+                    (let ((env (nfix env)))
+                      (logapp n env
+                              (logapp 1 (logbit m env)
+                                      (logapp (- (nfix m) (nfix n))
+                                              (logtail n env)
+                                              (logtail (+ 1 (nfix m)) env)))))))
+    :hints(("Goal" :in-theory (e/d* (arith-equiv-forwarding
+                                     env-update env-lookup)
+                                    ((:d env-move-var-down)))
+            :induct <call>
+            :expand <call>))))
 
 (define nth-set-bit-pos ((n natp)
                          (x integerp))
@@ -1831,9 +1962,92 @@
              (equal (nth-set-bit-pos (logcount (loghead m x)) x)
                     (nfix m)))
     :hints(("Goal" :in-theory (enable* ihsext-inductions ihsext-recursive-redefs)
-            :expand ((:free (n) (nth-set-bit-pos n x)))))))
-           
+            :expand ((:free (n) (nth-set-bit-pos n x))))))
 
+
+  (local (defun ind (n) (if (zp n) 0 (ind (1- n)))))
+  (defthm nth-set-bit-pos-of-minus1
+    (equal (nth-set-bit-pos n -1)
+           (nfix n))
+    :hints (("goal" :induct (ind n)
+             :expand ((nth-set-bit-pos n -1)))))
+
+  (local (defun lognot-ind (k n x)
+           (if (zp n)
+               (list k x)
+             (b* ((bit (b-not (logcar x))))
+               (lognot-ind (- (lnfix k) bit) (1- n) (logcdr x))))))
+  
+  (defthm nth-set-bit-pos-of-lognot
+    (implies (and (equal (logcount (loghead n x))
+                         (+ (- k) (nfix n)))
+                  (natp k)
+                  (not (logbitp n x)))
+             (equal (nth-set-bit-pos k (lognot x))
+                    (nfix n)))
+    :hints (("goal" :induct (lognot-ind k n x)
+             :in-theory (disable nth-set-bit-pos-lower-bound
+                                 nth-set-bit-pos-natp-when-less-than-logcount)
+             :expand ((lognot x)
+                      (loghead n x)
+                      (:free (a b) (logcount (logcons a b)))
+                      (:free (a b) (nth-set-bit-pos k (logcons a b))))))))
+           
+(define masked-bits ((mask integerp) (x integerp))
+  :measure (integer-length mask)
+  :hints(("Goal" :in-theory (enable integer-length**)))
+  :returns (bits integerp :rule-classes :type-prescription)
+  (cond ((zip mask) 0)
+        ((eql mask -1) (lifix x))
+        ((eql (logcar mask) 1) (logcons (logcar x)
+                                        (masked-bits (logcdr mask) (logcdr x))))
+        (t (masked-bits (logcdr mask) (logcdr x))))
+  ///
+  (local (defun logbitp-of-masked-ind (n mask x)
+           (declare (xargs :measure (integer-length mask)
+                           :hints(("Goal" :in-theory (enable integer-length**)))))
+           (cond ((zip mask) 0)
+                 ((eql mask -1) (list n x))
+                 ((eql (logcar mask) 1)
+                  (logbitp-of-masked-ind (1- (nfix n)) (logcdr mask) (logcdr x)))
+                 (t (logbitp-of-masked-ind n (logcdr mask) (logcdr x))))))
+
+  (defret logbitp-of-masked-bits
+    (equal (logbitp n bits)
+           (let ((pos (nth-set-bit-pos n mask)))
+             (and pos
+                  (logbitp pos x))))
+    :hints(("Goal" :in-theory (enable nth-set-bit-pos)
+            :induct (logbitp-of-masked-ind n mask x)
+            :expand ((nth-set-bit-pos n mask)
+                     (:free (n) (logbitp (+ 1 n) x))
+                     (logbitp 0 x))))))
+
+
+(define to-masked-bits ((mask integerp) (x integerp))
+  :measure (integer-length mask)
+  :hints(("Goal" :in-theory (enable integer-length**)))
+  :returns (bits integerp :rule-classes :type-prescription)
+  (cond ((zip mask) 0)
+        ((eql mask -1) (lifix x))
+        ((eql (logcar mask) 1)
+         (logcons (logcar x)
+                  (to-masked-bits (logcdr mask) (logcdr x))))
+        (t (logcons 0 (to-masked-bits (logcdr mask) x))))
+  ///
+  (local (defun ind (n mask x)
+           (if (zp n)
+               (list mask x)
+             (if (eql (logcar mask) 1)
+                 (ind (1- n) (logcdr mask) (logcdr x))
+               (ind (1- n) (logcdr mask) x)))))
+  (defret logbitp-of-to-masked-bits
+    (equal (logbitp n bits)
+           (and (logbitp n mask)
+                (logbitp (logcount (loghead n mask)) x)))
+    :hints (("goal" :induct (ind n mask x)
+             :expand (to-masked-bits mask x)
+             :in-theory (enable* ihsext-recursive-redefs)))))
 
 
 (define env-permute-shrink ((n natp)
@@ -1862,162 +2076,173 @@
              (equal <call>
                     (let ((count nil)) <call>))))
 
-  ;; (local (defthm logcount-lte-integer-length-when-natp
-  ;;          (implies (natp x)
-  ;;                   (<= (logcount x) (integer-length x)))
-  ;;          :hints(("Goal" :in-theory (enable* ihsext-inductions
-  ;;                                             ihsext-recursive-redefs)))
-  ;;          :rule-classes :linear))
+  (local (defthm logapp-right-assoc-casesplit-free
+           (implies (equal xx (logapp w2 a b))
+                    (equal (logapp w1 xx c)
+                           (if (<= (nfix w1) (nfix w2))
+                               (logapp w1 a c)
+                             (logapp w2 a
+                                     (logapp (- (nfix w1) (nfix w2)) b c)))))
+           :hints ((logbitp-reasoning))))
 
-  ;; (local (defthm logcount-of-loghead-lte-logcount
-  ;;          (implies (natp x)
-  ;;                   (<= (logcount (loghead n x)) (logcount x)))
-  ;;          :hints(("Goal" :in-theory (enable* ihsext-inductions
-  ;;                                             ihsext-recursive-redefs)))
-  ;;          :rule-classes :linear))
+  (local (defthm logtail-of-equal-to-logapp
+           (implies (equal xx (LOGAPP ACL2::SIZE ACL2::I ACL2::J))
+                    (EQUAL (LOGTAIL ACL2::N
+                                    xx)
+                           (IF (< (NFIX ACL2::N) (NFIX ACL2::SIZE))
+                               (LOGAPP (- (NFIX ACL2::SIZE) (NFIX ACL2::N))
+                                       (LOGTAIL ACL2::N ACL2::I)
+                                       ACL2::J)
+                               (LOGTAIL (- (NFIX ACL2::N) (NFIX ACL2::SIZE))
+                                        ACL2::J))))))
 
-  ;; (local (defthm logcount-position-when-idx-less-than-logcount
-  ;;          (implies (and (natp k) (natp mask)
-  ;;                        (< k (logcount (loghead n mask))))
-  ;;                   (<= k (logcount-position k mask)))
-  ;;          :rule-classes :linear))
-
-  ;; (local (defthm logcount-position-lower-bound
-  ;;          (<= (min (nfix k) (integer-length (nfix mask)))
-  ;;              (logcount-position k mask))
-  ;;          :hints (("goal" :in-theory (enable logcount-position integer-length**)))
-  ;;          :rule-classes ((:linear :trigger-terms ((logcount-position k mask))))))
-
-  ;; (local (defthm logcount-loghead-lte-integer-length
-  ;;          (implies (natp x)
-  ;;                   (<= (logcount (loghead n x)) (integer-length x)))
-  ;;          :hints(("Goal" :in-theory (enable* ihsext-inductions
-  ;;                                             ihsext-recursive-redefs)))
-  ;;          :rule-classes :linear))
-
-  ;; (local (defthm logcount-loghead-lte-width
-  ;;          (<= (logcount (loghead n x)) (nfix n))
-  ;;          :hints(("Goal" :in-theory (enable* ihsext-inductions
-  ;;                                             ihsext-recursive-redefs)))
-  ;;          :rule-classes :linear))
-
-  ;; (local (defthm logcount-position-of-logcount-loghead-lemma
-  ;;          (implies (and (logbitp (+ -1 (nfix n)) (nfix mask)))
-  ;;                   (equal (logcount-position (logcount (loghead n (nfix mask))) mask)
-  ;;                          (nfix n)))
-  ;;          :hints(("Goal" :in-theory (enable* ihsext-inductions ihsext-recursive-redefs)
-  ;;                  :induct (loghead n mask)
-  ;;                  :expand ((:free (mask) (logcount-position 0 mask))
-  ;;                           (:free (a) (logcount-position a mask))
-  ;;                           (nfix mask))))))
-
-  ;; (local (defthm logcount-position-of-logcount-loghead
-  ;;          (implies (and (equal mmask (nfix mask))
-  ;;                        (logbitp (+ -1 (nfix n)) (nfix mask)))
-  ;;                   (equal (logcount-position (logcount (loghead n mmask)) mask)
-  ;;                          (nfix n)))))
-
-  (local (defthm nth-set-bit-pos-of-equiv-logcount-loghead
-           (implies (and (nat-equiv k (logcount (loghead m x)))
-                         (logbitp m x))
-                    (equal (nth-set-bit-pos k x)
-                           (nfix m)))
-           :hints(("Goal" :in-theory (e/d* (arith-equiv-forwarding)
-                                           (nth-set-bit-pos-of-logcount-loghead))
-                   :use nth-set-bit-pos-of-logcount-loghead))))
-                         
-  ;; (local (defthm logcount-position-of-plus-1-logcount-loghead-lemma
-  ;;          (implies (and (logbitp n (nfix mask)))
-  ;;                   (equal (logcount-position (+ 1 (logcount (loghead n (nfix mask)))) mask)
-  ;;                          (+ 1 (nfix n))))
-  ;;          :hints(("Goal" :in-theory (enable* ihsext-inductions ihsext-recursive-redefs)
-  ;;                  :induct (loghead n mask)
-  ;;                  :expand ((:free (mask) (logcount-position 0 mask))
-  ;;                           (:free (a) (logcount-position a mask))
-  ;;                           (nfix mask))))))
-
-  ;; (local (defthm logcount-position-of-plus-1-logcount-loghead
-  ;;          (implies (and (equal mmask (nfix mask))
-  ;;                        (logbitp n (nfix mask)))
-  ;;                   (equal (logcount-position (+ 1 (logcount (loghead n mmask))) mask)
-  ;;                          (+ 1 (nfix n))))))
-
-  ;; (local (defthm logcount-position-of-plus-1-equiv-logcount-loghead
-  ;;          (implies (and (equal mmask (nfix mask))
-  ;;                        (natp k)
-  ;;                        (equal k (logcount (loghead n mmask)))
-  ;;                        (logbitp n mmask))
-  ;;                   (equal (logcount-position (+ 1 k) mask)
-  ;;                          (+ 1 (nfix n))))
-  ;;          :hints(("Goal" :in-theory (e/d* (arith-equiv-forwarding)
-  ;;                                          (logcount-position-of-plus-1-logcount-loghead
-  ;;                                           logcount-position-of-plus-1-logcount-loghead-lemma))
-  ;;                  :use logcount-position-of-plus-1-logcount-loghead))))
+  (local (defthm logbitp-of-logapp-free
+           (implies (equal xx (LOGAPP ACL2::SIZE ACL2::I ACL2::J))
+                    (equal (LOGBITP ACL2::POS xx)
+                           (IF (< (NFIX ACL2::POS) (NFIX ACL2::SIZE))
+                               (LOGBITP ACL2::POS ACL2::I)
+                               (LOGBITP (+ (NFIX ACL2::POS)
+                                           (- (NFIX ACL2::SIZE)))
+                                        ACL2::J))))))
            
 
-  (defret lookup-in-env-permute-shrink-over-bounds
-    (implies (>= (nfix k) (nfix numvars))
-             (equal (env-lookup k perm-env)
-                    (env-lookup k env)))
-    :hints(("Goal" :in-theory (enable* arith-equiv-forwarding)
-            :induct <call> :do-not-induct t)))
+  (local
+   (encapsulate nil
+     (defthm lemma1
+       (implies (not (logbitp n (nfix mask)))
+                (equal (LOGAPP (+ 1 (NFIX N)
+                                  (- (LOGCOUNT (LOGHEAD N (NFIX MASK)))))
+                               (MASKED-BITS (LOGNOT (NFIX MASK))
+                                            ORIG-ENV)
+                               (LOGTAIL (+ 1 (NFIX N)) ORIG-ENV))
+                       (LOGAPP (+ (NFIX N)
+                                  (- (LOGCOUNT (LOGHEAD N (NFIX MASK)))))
+                               (MASKED-BITS (LOGNOT (NFIX MASK))
+                                            ORIG-ENV)
+                               (LOGTAIL N ORIG-ENV))))
+       :hints ((logbitp-reasoning)))
 
-  (defret lookup-in-env-permute-shrink-under-bounds
-    (implies (< (nfix k) (logcount (loghead n (nfix mask))))
-             (equal (env-lookup k perm-env)
-                    (env-lookup k env)))
-    :hints(("Goal" :in-theory (enable* arith-equiv-forwarding)
-            :induct <call> :do-not-induct t)))
-
+     (defthm lemma2
+       (implies (logbitp n (nfix mask))
+                (equal (LOGAPP (LOGCOUNT (LOGHEAD N (NFIX MASK)))
+                               (MASKED-BITS (NFIX MASK) ORIG-ENV)
+                               (LOGAPP 1 (BOOL->BIT (LOGBITP N ORIG-ENV))
+                                       x))
+                       (LOGAPP (+ 1 (LOGCOUNT (LOGHEAD N (NFIX MASK))))
+                               (MASKED-BITS (NFIX MASK) ORIG-ENV)
+                               x)))
+       :hints ((logbitp-reasoning)))))
   
+  ;; (local
+  ;;  (encapsulate nil
+  ;;    (defthm replace-equal-to-logapp-in-logapp
+  ;;      (implies (equal (nfix a) (logapp w b c))
+  ;;               (equal (logapp x (nfix a) y)
+  ;;                      (logapp x (logapp w b c) y))))
 
-  (defret lookup-in-env-permute-shrink-in-bounds-full
-    (implies (and (<= (logcount (loghead n (nfix mask))) (nfix k))
-                  (< (nfix k) (nfix numvars)))
-             (equal (env-lookup k perm-env)
-                    (cond ((< (nfix k) (logcount (loghead numvars (nfix mask))))
-                           (env-lookup (nth-set-bit-pos k (nfix mask)) env))
-                          (t
-                           (env-lookup (nth-set-bit-pos (- (nfix k) (logcount (loghead numvars (nfix mask))))
-                                                        (lognot (nfix mask)))
-                                       env)))))
-    :hints(("Goal" :in-theory (enable* arith-equiv-forwarding)
-            :induct <call> :do-not-induct t)))
-
+  ;;    (defthm replace-equal-to-logapp-in-logbitp
+  ;;      (implies (equal (nfix a) (logapp w b c))
+  ;;               (equal (logbitp n (nfix a))
+  ;;                      (logbitp n (logapp w b c)))))))
   
-  (defret lookup-in-env-permute-shrink-in-bounds-1
-    (implies (and (<= (logcount (loghead n (nfix mask))) (nfix k))
-                  (< (nfix k) (logcount (loghead numvars (nfix mask)))))
-             (equal (env-lookup k perm-env)
-                    (env-lookup (nth-set-bit-pos k (nfix mask)) env)))
-    :hints(("Goal" :in-theory (enable* arith-equiv-forwarding)
-            :induct <call> :do-not-induct t)))
+  (local
+   (defret env-permute-shrink-correct-rec
+     (implies (and (equal (nfix env)
+                          (logapp (logcount (loghead n (nfix mask)))
+                                  (masked-bits (nfix mask) orig-env)
+                                  (logapp (- (nfix n) (logcount (loghead n (nfix
+                                                                            mask))))
+                                          (masked-bits (lognot (nfix mask))
+                                                       orig-env)
+                                          (logtail n orig-env))))
+                   (natp orig-env)
+                   (<= (nfix n) (nfix numvars)))
+              (equal perm-env
+                     (logapp (logcount (loghead numvars (nfix mask)))
+                             (masked-bits (nfix mask) orig-env)
+                             (logapp (- (nfix numvars) (logcount (loghead
+                                                                  numvars (nfix
+                                                                           mask))))
+                                     (masked-bits (lognot (nfix mask)) orig-env)
+                                     (logtail numvars orig-env)))))
+     :hints (("goal" :induct <call>
+              :expand ((:free (count env) <call>))
+              :in-theory (enable* arith-equiv-forwarding
+                                  env-move-var-down-arith)))))
 
-  (defret lookup-in-env-permute-shrink-in-bounds-2
-    (implies (and (<= (logcount (loghead numvars (nfix mask))) (nfix k))
-                  (< (nfix k) (nfix numvars)))
-             (equal (env-lookup k perm-env)
-                    (env-lookup (nth-set-bit-pos (- (nfix k) (logcount (loghead numvars (nfix mask))))
-                                                 (lognot (nfix mask)))
-                                env)))
-    :hints(("Goal" :in-theory (enable* arith-equiv-forwarding)
-            :induct <call> :do-not-induct t))))
+  (defthm env-permute-shrink-correct
+    (equal (env-permute-shrink 0 count mask env numvars)
+           (logapp (logcount (loghead numvars (nfix mask)))
+                   (masked-bits (nfix mask) (nfix env))
+                   (logapp (- (nfix numvars) (logcount (loghead numvars (nfix mask))))
+                           (masked-bits (lognot (nfix mask)) (nfix env))
+                           (logtail numvars (nfix env)))))
+    :hints (("goal" :use ((:instance env-permute-shrink-correct-rec
+                           (n 0) (orig-env (nfix env))))))))
 
-(gl::def-gl-thm lookup-in-env-permute-shrink-in-bounds-1-ctrex
-  :hyp (and (unsigned-byte-p 16 env)
-            (natp k) (< k 4)
-            (unsigned-byte-p 4 mask))
-  :concl
-  (let* ((n 0)
-         (numvars 4)
-         (count (logcount (loghead n (nfix mask)))))
-    (implies (and (<= count (nfix k))
-                  (< (nfix k) (logcount (loghead numvars (nfix mask)))))
-             (equal (env-lookup k (env-permute-shrink n count mask env numvars))
-                    (env-lookup (nth-set-bit-pos k (nfix mask)) env))))
-  :g-bindings `((env ,(gl::g-int 0 1 17))
-                (k ,(gl::g-int 17 1 3))
-                (mask ,(gl::g-int 21 1 5))))
+
+
+(define env-permute-stretch ((n natp)
+                            (count)
+                            (mask natp)
+                            (env natp)
+                            (numvars natp))
+  :measure (nfix (- (nfix numvars) (nfix n)))
+  :guard (and (<= n numvars)
+              (eql count (logcount (loghead n mask))))
+  :returns (perm-env natp :rule-classes :type-prescription)
+  (b* (((when (mbe :logic (zp (- (nfix numvars) (nfix n)))
+                   :exec (eql n numvars)))
+        (lnfix env))
+       (n (lnfix n))
+       (count (mbe :logic (logcount (loghead n (lnfix mask)))
+                   :exec count))
+       (bit (logbit n (lnfix mask)))
+       (env (env-permute-stretch (1+ n) (+ bit count) mask env numvars)))
+    (if (eql bit 1)
+        (env-move-var-up count n env)
+      env))
+  ///
+  (defret normalize-count-of-env-permute-stretch
+    (implies (syntaxp (not (equal count ''nil)))
+             (equal <call>
+                    (let ((count nil)) <call>))))
+
+  (local
+   (defret env-permute-stretch-correct-rec
+     (implies (and (equal (nfix env)
+                          (logapp (logcount (loghead n (nfix mask)))
+                                  (masked-bits (nfix mask) orig-env)
+                                  (logapp (- (nfix n) (logcount (loghead n (nfix
+                                                                            mask))))
+                                          (masked-bits (lognot (nfix mask))
+                                                       orig-env)
+                                          (logtail n orig-env))))
+                   (natp orig-env)
+                   (<= (nfix n) (nfix numvars)))
+              (equal perm-env
+                     (logapp (logcount (loghead numvars (nfix mask)))
+                             (masked-bits (nfix mask) orig-env)
+                             (logapp (- (nfix numvars) (logcount (loghead
+                                                                  numvars (nfix
+                                                                           mask))))
+                                     (masked-bits (lognot (nfix mask)) orig-env)
+                                     (logtail numvars orig-env)))))
+     :hints (("goal" :induct <call>
+              :expand ((:free (count env) <call>))
+              :in-theory (enable* arith-equiv-forwarding
+                                  env-move-var-down-arith)))))
+
+  (defthm env-permute-stretch-correct
+    (equal (env-permute-stretch 0 count mask env numvars)
+           (logapp (logcount (loghead numvars (nfix mask)))
+                   (masked-bits (nfix mask) (nfix env))
+                   (logapp (- (nfix numvars) (logcount (loghead numvars (nfix mask))))
+                           (masked-bits (lognot (nfix mask)) (nfix env))
+                           (logtail numvars (nfix env)))))
+    :hints (("goal" :use ((:instance env-permute-stretch-correct-rec
+                           (n 0) (orig-env (nfix env))))))))
+
 
 
 
