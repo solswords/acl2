@@ -534,6 +534,7 @@ The function ~x0 is missing its ~x1 property; perhaps it is not defined.~%"
     evmeta-ev-meta-extract-global-badguy))
   :hints ((and stable-under-simplificationp
                '(:use (evmeta-ev-constraint-0
+                       evmeta-ev-of-nonsymbol-atom
                        evmeta-ev-falsify
                        evmeta-ev-meta-extract-global-badguy)))))
 
@@ -794,7 +795,7 @@ The function ~x0 is missing its ~x1 property; perhaps it is not defined.~%"
                                                      acl2-count
                                                      (:t acl2-count)
                                                      o< o-finp)))))
-          (b* (((when (atom x)) (and x (cdr (assoc x a))))
+          (b* (((when (atom x)) (and (symbolp x) x (cdr (assoc x a))))
                ((when (eq (car x) 'quote)) (cadr x))
                (args (_name_-ev-concrete-lst
                       (cdr x) a appalist))
@@ -857,6 +858,7 @@ The function ~x0 is missing its ~x1 property; perhaps it is not defined.~%"
                                    ;; _name_-ev-rules
                                    kwote nfix
                                    _name_-ev-of-fncall-args
+                                   _name_-ev-of-nonsymbol-atom
                                    (cons) (equal) (member-equal) (eql)
                                    car-cons cdr-cons _name_-eval-nth-kwote-lst
                                    list-fix-when-true-listp
