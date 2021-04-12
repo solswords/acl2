@@ -359,17 +359,19 @@ b = (a << 1) | (b << 1)
     :hints(("Goal" :in-theory (enable svarlist-fix)))))
 
 (define svex-updates-pair-masks ((updates svex-alist-p)
-                                 (masks svex-mask-alist-p))
+                                 (masks svex-mask-alist-p)
+                                 (new-masks-acc svex-mask-alist-p))
   :returns (newmasks svex-mask-alist-p
                      :hints(("Goal" :in-theory (enable svex-mask-alist-p))))
   :guard-hints (("goal" :in-theory (enable svarlist-p)))
   :measure (len (svex-alist-fix updates))
   (b* ((updates (svex-alist-fix updates))
-       ((when (atom updates)) nil)
+       ((when (atom updates)) (svex-mask-alist-fix new-masks-acc))
        ((cons var svex) (car updates))
-       (mask (svex-mask-lookup (svex-var var) masks)))
-    (cons (cons svex mask)
-          (svex-updates-pair-masks (cdr updates) masks)))
+       (mask (svex-mask-lookup (svex-var var) masks))
+       (svex-mask (svex-mask-lookup svex new-masks-acc))
+       (new-masks-acc (hons-acons svex (4vmask-union mask svex-mask) new-masks-acc)))
+    (svex-updates-pair-masks (cdr updates) masks new-masks-acc))
   ///
   (deffixequiv svex-updates-pair-masks
     :hints(("Goal" :in-theory (enable svarlist-fix)))))
@@ -408,7 +410,8 @@ b = (a << 1) | (b << 1)
 
 (define svex-compose-extract-nonstable-vars ((loop-updates svex-alist-p)
                                              (curr-masks svex-mask-alist-p)
-                                             (final-masks svex-mask-alist-p))
+                                             (final-masks svex-mask-alist-p)
+                                             (rest-alist svex-alist-p))
   ;; Extracts from loop-updates the subset of variables whose masks decrease
   ;; from curr-masks to final-masks.
   :measure (len (svex-alist-fix loop-updates))
@@ -417,17 +420,16 @@ b = (a << 1) | (b << 1)
        ((when (atom loop-updates)) nil)
        (var (caar loop-updates))
        (svex-var (svex-var var))
+       ((when (svex-fastlookup var rest-alist))
+        (cons (car loop-updates)
+              (svex-compose-extract-nonstable-vars (cdr loop-updates) curr-masks final-masks rest-alist)))
        (mask1 (svex-mask-lookup svex-var curr-masks))
        (mask2 (svex-mask-lookup svex-var final-masks))
-       ((when (sparseint-< mask2 0))
-        (svex-compose-extract-nonstable-vars (cdr loop-updates) curr-masks final-masks))
-       ((when (sparseint-< mask1 0))
+       ((when (sparseint-test-bitandc1 mask2 mask1))
+        ;; there's at least one bit set in mask1 that is not set in mask2
         (cons (car loop-updates)
-              (svex-compose-extract-nonstable-vars (cdr loop-updates) curr-masks final-masks))))
-    (if (< (4vmask-bitcount mask2) (4vmask-bitcount mask1))
-        (cons (car loop-updates)
-              (svex-compose-extract-nonstable-vars (cdr loop-updates) curr-masks final-masks))
-      (svex-compose-extract-nonstable-vars (cdr loop-updates) curr-masks final-masks))))
+              (svex-compose-extract-nonstable-vars (cdr loop-updates) curr-masks final-masks rest-alist))))
+    (svex-compose-extract-nonstable-vars (cdr loop-updates) curr-masks final-masks rest-alist)))
        
 
 (define svex-compose-keep-nonzero-mask-updates ((loop-updates svex-alist-p)
@@ -599,6 +601,103 @@ substitution are left in place."
                                    (svex-alist-p))))))
 
 
+(define svex-updates-propagate-masks ((masks svex-mask-alist-p)
+                                      (updates svex-alist-p))
+  :returns (new-masks svex-mask-alist-p)
+  (svex-mask-alist-expand
+   (svex-updates-pair-masks updates masks nil)))
+
+
+(define svex-alist-rewrite-under-masks ((x svex-alist-p)
+                                        (masks svex-mask-alist-p)
+                                        &key (verbosep 'nil))
+  :returns (new-x svex-alist-p)
+  (pairlis$ (svex-alist-keys x)
+            (svexlist-rewrite-under-masks (svex-alist-vals x) masks :verbosep verbosep))
+  ///
+
+  (local (Defthm svex-eval-of-svex-lookup
+           (equal (svex-eval (svex-lookup k x) env)
+                  (svex-env-lookup k (svex-alist-eval x env)))))
+
+  (local (in-theory (disable svex-env-lookup-of-svex-alist-eval)))
+
+  (local (defthm nth-of-4veclist-mask
+           (implies (and (< (nfix n) (len 4veclist)))
+                    (equal (nth n (4veclist-mask masklist 4veclist))
+                           (4vec-mask (nth n masklist) (nth n 4veclist))))
+           :hints(("Goal" :in-theory (enable 4veclist-mask nth)))))
+
+
+  (local (defthm nth-of-svex-argmasks-lookup
+           (implies (< (nfix n) (len x))
+                    (equal (nth n (svex-argmasks-lookup x masks))
+                           (svex-mask-lookup (nth n x) masks)))
+           :hints(("Goal" :in-theory (enable svex-argmasks-lookup nth)))))
+
+
+  (local (defthm nth-of-svexlist-eval
+           (implies (< (nfix n) (len x))
+                    (equal (nth n (svexlist-eval x env))
+                           (svex-eval (nth n x) env)))
+           :hints(("Goal" :in-theory (enable svexlist-eval nth)))))
+
+  (local (defthm svexlist-rewrite-under-masks-nth-correct
+           (implies (and (svex-mask-alist-complete masks)
+                         (< (nfix n) (len x))
+                         (svex-equiv nth (nth n x)))
+                    (equal (4vec-mask (svex-mask-lookup nth masks)
+                                      (svex-eval (nth n (svexlist-rewrite-under-masks
+                                                         x masks :verbosep verbosep))
+                                                 env))
+                           (4vec-mask (svex-mask-lookup (nth n x) masks)
+                                      (svex-eval (nth n x) env))))
+           :hints (("goal" :use ((:instance nth-of-4veclist-mask
+                                  (masklist (svex-argmasks-lookup x masks))
+                                  (4veclist (svexlist-eval (svexlist-rewrite-under-masks
+                                                            x masks :Verbosep verbosep)
+                                                           env))))
+                    :in-theory (disable nth-of-4veclist-mask)
+                    :do-not-induct t)
+                   (and stable-under-simplificationp
+                        '(:in-theory (enable nth-of-4veclist-mask))))))
+
+
+  (local (include-book "std/lists/index-of" :dir :system))
+
+  (local (defthm svex-env-lookup-of-pairlis$
+           (implies (and (svarlist-p keys)
+                         (member-equal (svar-fix var) keys))
+                    (equal (svex-env-lookup var (pairlis$ keys vals))
+                           (4vec-fix (nth (acl2::index-of (svar-fix var) keys)
+                                          vals))))
+           :hints(("Goal" :in-theory (enable svex-env-lookup svex-env-fix index-of)))))
+
+  (local (defthm svex-alist-eval-of-pairlis$
+           (implies (and (svarlist-p keys)
+                         (<= (len keys) (len vals)))
+                    (equal (svex-alist-eval (pairlis$ keys vals) env)
+                           (pairlis$ keys (svexlist-eval vals env))))
+           :hints(("Goal" :in-theory (enable svex-alist-eval svexlist-eval)))))
+
+
+  (local (defthm nth-index-of-svex-alist
+           (implies (svex-lookup var x)
+                    (equal (nth (index-of (svar-fix var)
+                                          (svex-alist-keys x))
+                                (svex-alist-vals x))
+                           (svex-lookup var x)))
+           :hints(("Goal" :in-theory (enable svex-lookup svex-alist-keys svex-alist-vals index-of nth)))))
+
+  (defret lookup-of-<fn>
+    (implies (and (svex-mask-alist-complete masks)
+                  (svex-lookup var x))
+             (let ((orig  (svex-lookup var x)))
+               (equal (4vec-mask (svex-mask-lookup orig masks)
+                                 (svex-eval (svex-lookup var new-x) env))
+                      (4vec-mask (svex-mask-lookup orig masks)
+                                 (svex-eval orig env)))))))
+
 (define svexlist-compose-to-fix-rec2
   ((masks svex-mask-alist-p "Masks -- initially those of the updates, then those
                              for successive iterations of applying
@@ -724,24 +823,24 @@ comments following this last example.</p>
        ;; variable's occurrence in updates, which is (hopefully) less than the
        ;; full mask.  This maps (bitnot (concat 1 a (concat 1 0 (zerox 2 a))))
        ;; to 111 on the first iteration, then 11, then 1.
-       (masks-start (svex-updates-pair-masks loop-updates masks))
+
        ;; Now expand those masks.  In the first iteration, this gives us the
        ;; masks for variables after composing together two copies of the
        ;; updates.  I.e. the mask for a is 11 in the first iteration and 1 in
        ;; the second and beyond.
-       (masks-exp1 (cwtime (svex-mask-alist-expand masks-start) :mintime 0))
+       (masks-exp1 (cwtime (svex-updates-propagate-masks masks loop-updates) :mintime 0))
 
        ;; Now rewrite the loop-updates under those masks
        (updates-rw
         (cwtime (svexlist-rewrite-under-masks (svex-alist-vals loop-updates) masks-exp1)))
        (- (cw "Masked updates count: ~x0~%" (cwtime (svexlist-opcount updates-rw))))
        (- (fast-alist-free masks-exp1))
-       (masks-exp (cwtime (svex-mask-alist-expand
-                           (svex-updates-pair-masks (pairlis$ (svex-alist-keys loop-updates)
-                                                              updates-rw)
-                                                    masks))))
-
        (loop-vars (svex-alist-keys loop-updates))
+
+       (masks-exp (cwtime (svex-updates-propagate-masks masks (pairlis$ loop-vars
+                                                                        updates-rw))
+                          :mintime 0))
+
        (new-count (cwtime (svexlist-masks-measure
                            loop-vars masks-exp) :mintime 0))
        ;; note: final-masks is a fast alist b/c svex-mask-alist-expand returns
@@ -759,7 +858,8 @@ comments following this last example.</p>
        (changed-var-updates (with-fast-alist masks
                               (svex-compose-extract-nonstable-vars loop-updates
                                                                    masks
-                                                                   final-masks)))
+                                                                   final-masks
+                                                                   rest-alist)))
        (res (if rest-alist
                 (with-fast-alist rest-alist
                   (svex-alist-compose* changed-var-updates rest-alist))
