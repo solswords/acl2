@@ -541,7 +541,6 @@ my $outfile = maybe_switch_to_tempdir($fulldir, "$file.$TARGETEXT.out");
 
 print "-- Removing files to be generated.\n" if $DEBUG;
 
-remove_file_if_exists($goal);
 remove_file_if_exists($timefile);
 remove_file_if_exists($outfile);
 
@@ -571,23 +570,6 @@ my $tmpbase = "workxxx.$goal.$rnd";
 my $lisptmp = maybe_switch_to_tempdir($fulldir, "$tmpbase.LISP");
 print "-- Temporary lisp file: $lisptmp\n" if $DEBUG;
 
-my $instrs = "";
-
-# I think this strange :q/lp dance is needed for lispworks or something?
-$instrs .= "(acl2::value :q)\n";
-$instrs .= "(acl2::in-package \"ACL2\")\n";
-$instrs .= "; see github issue #638 (waterfall-parallelism and profiling): \n";
-$instrs .= "#+(and hons (not acl2-par)) (profile-fn 'prove)\n";
-$instrs .= "#+(and hons (not acl2-par)) (profile-fn 'certify-book-fn)\n";
-$instrs .= "(acl2::lp)\n";
-# We used to comment this out, but maybe it's better to leave this enabled by default?
-$instrs .= "(set-debugger-enable :bt)\n" if ($STACK_TRACES);
-$instrs .= "(acl2::in-package \"ACL2\")\n\n";
-$instrs .= "(set-ld-error-action (quote (:exit 1)) state)\n";
-$instrs .= "(set-write-acl2x t state)\n" if ($STEP eq "acl2x");
-$instrs .= "(set-write-acl2x '(t) state)\n" if ($STEP eq "acl2xskip");
-$instrs .= "$INHIBIT\n" if ($INHIBIT);
-$instrs .= "\n";
 
 # --- Scan the source file for includes (to collect the portculli) and resource limits ----
 my ($max_mem, $max_time, $includes, $book_pbs) = scan_source_file("$file.lisp");
@@ -602,45 +584,71 @@ my $acl2file = (-f "$file.acl2") ? "$file.acl2"
 
 my $usercmds = $acl2file ? read_file_except_certify($acl2file) : "";
 my $acl2_pbs = $acl2file ? extract_pbs_from_acl2file($acl2file) : [];
+my $acl2_certparams = $acl2file ? scan_src_for_cert_params($acl2file) : {};
+my $override_default_instrs = $acl2_certparams->{"override_certification_defaults"};
 
+my $instrs = "";
+
+if ($override_default_instrs) {
+    $instrs .= "(acl2::ld \"${file}.acl2\" :ld-error-action '(:exit 1))\n";
+    $instrs .= "#!acl2 (exit 43)";
+} else {
+
+    remove_file_if_exists($goal);
+
+# I think this strange :q/lp dance is needed for lispworks or something?
+    $instrs .= "(acl2::value :q)\n";
+    $instrs .= "(acl2::in-package \"ACL2\")\n";
+    $instrs .= "; see github issue #638 (waterfall-parallelism and profiling): \n";
+    $instrs .= "#+(and hons (not acl2-par)) (profile-fn 'prove)\n";
+    $instrs .= "#+(and hons (not acl2-par)) (profile-fn 'certify-book-fn)\n";
+    $instrs .= "(acl2::lp)\n";
+# We used to comment this out, but maybe it's better to leave this enabled by default?
+    $instrs .= "(set-debugger-enable :bt)\n" if ($STACK_TRACES);
+    $instrs .= "(acl2::in-package \"ACL2\")\n\n";
+    $instrs .= "(set-ld-error-action (quote (:exit 1)) state)\n";
+    $instrs .= "(set-write-acl2x t state)\n" if ($STEP eq "acl2x");
+    $instrs .= "(set-write-acl2x '(t) state)\n" if ($STEP eq "acl2xskip");
+    $instrs .= "$INHIBIT\n" if ($INHIBIT);
+    $instrs .= "\n";
 # Don't hideously underapproximate timings in event summaries
-$instrs .= "(acl2::assign acl2::get-internal-time-as-realtime acl2::t)\n";
+    $instrs .= "(acl2::assign acl2::get-internal-time-as-realtime acl2::t)\n";
 
 # Don't hide GC messages -- except for CMUCL, which dumps them to the terminal.
-$instrs .= "#-cmucl (acl2::gc-verbose t)\n";
+    $instrs .= "#-cmucl (acl2::gc-verbose t)\n";
 
-$instrs .= "; instructions from .acl2 file $acl2file:\n";
-$instrs .= "$usercmds\n\n";
+    $instrs .= "; instructions from .acl2 file $acl2file:\n";
+    $instrs .= "$usercmds\n\n";
 
-$instrs .= "; Prevent reset-prehistory while loading .port files\n";
+    $instrs .= "; Prevent reset-prehistory while loading .port files\n";
 # Since reset-prehistory is never redundant, this is important to
 # prevent exponential growth in the number of reset-prehistory
 # commands when building on a saved image that uses reset-prehistory.
-$instrs .= "(acl2::assign acl2::skip-reset-prehistory acl2::t)\n";
+    $instrs .= "(acl2::assign acl2::skip-reset-prehistory acl2::t)\n";
 
-$instrs .= "; portculli for included books:\n";
-foreach my $pair (@$includes) {
-    my ($incname, $incdir) = @$pair;
-    if ($incdir) {
-	$instrs .= "(acl2::ld \"$incname.port\" :dir :$incdir :ld-missing-input-ok t)\n";
-    } else {
-	$instrs .= "(acl2::ld \"$incname.port\" :ld-missing-input-ok t)\n";
+    $instrs .= "; portculli for included books:\n";
+    foreach my $pair (@$includes) {
+	my ($incname, $incdir) = @$pair;
+	if ($incdir) {
+	    $instrs .= "(acl2::ld \"$incname.port\" :dir :$incdir :ld-missing-input-ok t)\n";
+	} else {
+	    $instrs .= "(acl2::ld \"$incname.port\" :ld-missing-input-ok t)\n";
+	}
     }
-}
 
 # LD'd files above may change the current package
-$instrs .= "#!ACL2 (set-ld-error-action (quote :continue) state)\n";
+    $instrs .= "#!ACL2 (set-ld-error-action (quote :continue) state)\n";
 
-my $cert_flags = parse_certify_flags($acl2file, $usercmds);
-$instrs .= "\n; certify-book command flags: $cert_flags\n";
+    my $cert_flags = parse_certify_flags($acl2file, $usercmds);
+    $instrs .= "\n; certify-book command flags: $cert_flags\n";
 
-my $cert_cmds = "#!ACL2 (er-progn (time\$ (certify-book \"$file\" $cert_flags $PCERT $ACL2X))
+    my $cert_cmds = "#!ACL2 (er-progn (time\$ (certify-book \"$file\" $cert_flags $PCERT $ACL2X))
                                  (value (prog2\$ #+hons (memsum)
                                                  #-hons nil
                                                  (exit 43))))\n";
 
-$instrs .= $cert_cmds;
-
+    $instrs .= $cert_cmds;
+} 
 if ($DEBUG) {
     print "-- ACL2 Instructions: $lisptmp --\n";
     print "$instrs\n";

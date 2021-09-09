@@ -1181,6 +1181,10 @@ sub src_deps {
 		if (! $fullname) {
 		    print STDERR "Bad path in (include-book \"$bookname\""
 			. ($dir ? " :dir $dir)" : ")") . " in $fname\n";
+		} elsif ( $certinfo->prev_certified->{$fullname} ) {
+		    print "include-book $fullname (skipped)\n" if $debugging;
+		    # A previous certify-book command in this .acl2 file certified this book
+		    # so we won't add a dependency.
 		} else {
 		    print "include-book fullname: $fullname\n" if $debugging;
 		    if ($portp) {
@@ -1209,6 +1213,32 @@ sub src_deps {
 			# Presumably we've printed an error message already?
 		    }
 		}
+	    } elsif ($type eq certify_book_event) {
+		my (undef, $bookname) = @$event;
+		if ($certinfo->params->{"override_certification_defaults"}) {
+		    # If the override_certification_defaults cert_param is set then
+		    # we're allowed to do things like
+		    # (certify-book "foo")
+		    # :u
+		    # (certify-book "bar")
+		    # In this case a certify-book event should be treated somewhat like an LD,
+		    # with dependencies from the source file added in to ours.
+		    my $fullname = expand_dirname_cmd($bookname, $fname, 0,
+						      $incdirs,
+						      "certify-book",
+						      ".lisp");
+		    if (! $fullname) {
+			print STDERR "Bad path in (certify-book \"$bookname\")" . " in $fname\n";
+		    } else {
+			print "certify-book fullname: $fullname\n" if $debugging;
+			src_deps($fullname, $depdb, $certinfo, 0, 0, $seen, $fname);
+			(my $base = $fullname) =~ s/\.lisp$//;
+			my $certfile = $base . ".cert";
+			$certinfo->prev_certified->{$certfile} = 1;
+			print "prev_certified $fullname\n" if $debugging;
+		    }
+		}
+		# Otherwise we don't do anything.
 	    } elsif ($type eq depends_on_event) {
 		my $depname = $event->[1];
 		my $dir = $event->[2];
@@ -1348,12 +1378,24 @@ sub find_deps {
 	}
     }
 
-    # Scan the lisp file for include-books.
-    src_deps($lispfile, $depdb, $certinfo, (! $certifiable), 0, {}, $parent);
+    if (! $certinfo->params->{"override_certification_defaults"}) {
+	# If the .acl2 file has the override_certification_defaults
+	# cert_param set then it had better have a certify-book
+	# command for at least this book, and we will have already
+	# scanned this lisp file.
+
+	# Scan the lisp file for include-books.
+	src_deps($lispfile, $depdb, $certinfo, (! $certifiable), 0, {}, $parent);
+    } else {
+	push(@{$certinfo->srcdeps}, $lispfile);
+    }
+
 
     if ($debugging) {
 	print "find_deps $lispfile: bookdeps:\n";
 	print_lst($certinfo->bookdeps);
+	print "portdeps:\n";
+	print_lst($certinfo->portdeps);
 	print "sources:\n";
 	print_lst($certinfo->srcdeps);
 	print "others:\n";
@@ -1821,6 +1863,10 @@ sub add_deps {
         foreach my $dep (@{$certinfo->bookdeps}) {
             print "$dep\n";
         }
+        print "port:\n";
+        foreach my $dep (@{$certinfo->portdeps}) {
+            print "$dep\n";
+        }
         print "src:\n";
         foreach my $dep (@{$certinfo->srcdeps}) {
             print "$dep\n";
@@ -1956,6 +2002,7 @@ sub process_labels_and_targets {
 		push (@targets, @{$certinfo->bookdeps});
 		push (@targets, @{$certinfo->portdeps});
 		push (@$label_targets, @{$certinfo->bookdeps}) if $label_started;
+		push (@$label_targets, @{$certinfo->portdeps}) if $label_started;
 	    } else {
 		print STDERR "Bad path for target: $str\n";
 	    }

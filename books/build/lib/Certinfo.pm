@@ -43,6 +43,7 @@ use Class::Struct Certinfo => [ bookdeps => '@',        # books included by this
 				params => '%',          # cert_param entries
 				include_dirs => '%',    # add-include-book-dir! forms
 				local_include_dirs => '%', # all add-include-book-dir(!) forms
+				prev_certified => '%',  # tracks which books have been certified in .acl2 files that certify more than one thing
 				defines => '%',         # exported ifdef-defines/undefines, strings mapped to "1"/""
 				local_defines => '%',   # all ifdef-defines/undefines, strings mapped to "1"/""
 				rec_visited => '%' ];   # already seen files for depends_rec

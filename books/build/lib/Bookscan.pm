@@ -39,6 +39,7 @@ use base 'Exporter';
 our @EXPORT = qw(
 add_dir_event
 include_book_event
+certify_book_event
 depends_on_event
 depends_rec_event
 loads_event
@@ -53,6 +54,7 @@ pbs_event
 scan_src
 scan_src_run
 parse_params
+scan_src_for_cert_params
 );
 
 my $debugging = 0;
@@ -64,6 +66,7 @@ sub set_debugging () {
 # "Event" types:
 sub add_dir_event () { return 'add-include-book-dir'; }
 sub include_book_event () { return 'include-book'; }
+sub certify_book_event () { return 'certify-book'; }
 sub depends_on_event () { return 'depends-on'; }
 sub depends_rec_event () { return 'depends-rec'; }
 sub loads_event () { return 'loads'; }
@@ -189,6 +192,26 @@ sub scan_include_book {
     if (@res) {
 	$islocal = $islocal || ($+{local} ? 1 : 0);
 	my $ans = [include_book_event, $+{book}, uc($+{dirname} || ""), $+{noport} ? 1 : 0, $islocal ];
+	debug_print_event($base, $ans);
+	return $ans;
+    }
+    return 0;
+}
+
+
+sub scan_certify_book {
+    my ($base, $the_line) = @_;
+
+    my @res = $the_line =~
+	m/^[^;]*?   # not commented. Minimal match so we don't miss the optional local.
+          \(\s*
+           (?:[^\s():]*::)? # package prefix
+           certify-book
+           \s*
+           "(?<book>[^"]*)"
+       /xi;
+    if (@res) {
+	my $ans = [certify_book_event, $+{book}];
 	debug_print_event($base, $ans);
 	return $ans;
     }
@@ -404,6 +427,7 @@ sub scan_src {
 		# just whitespace so skip, in particular don't remove $islocal
 	    } else {
 		my $event = scan_include_book($fname, $the_line, $islocal)
+		    || scan_certify_book($fname, $the_line)
 		    || scan_cert_param($fname, $the_line)
 		    || scan_depends_on($fname, $the_line)
 		    || scan_depends_rec($fname, $the_line)
@@ -435,7 +459,7 @@ sub scan_src_run {
     my @events = ();
     if (open(my $file, "<", $fname)) {
 	while (my $the_line = <$file>) {
-	    my $event = scan_include_book($fname, $the_line)
+	    my $event = scan_include_book($fname, $the_line, 0)
 		|| scan_max_mem($fname, $the_line)
 		|| scan_max_time($fname, $the_line)
 		|| scan_ifdef($fname, $the_line)
@@ -450,5 +474,25 @@ sub scan_src_run {
     }
     return \@events;
 }
+
+sub scan_src_for_cert_params {
+    my $fname = shift;
+    my %params = ();
+    if (open (my $file, "<", $fname)) {
+	while (my $the_line = <$file>) {
+	    my $event = scan_cert_param($fname, $the_line);
+	    if ($event) {
+		my $pairs = $event->[1];
+		foreach my $pair (@$pairs) {
+		    (my $name, my $val) = @$pair;
+		    $params{$name} = $val;
+		}
+	    }
+	}
+	close($file);
+    }
+    return \%params;
+}
+
 
 1;
