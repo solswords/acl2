@@ -20597,6 +20597,22 @@
                                             :updater-name)))
                        (putprop updater 'invariant-risk updater wrld)))))))))
 
+(defun chk-defstobj-attachments (recog-name ctx wrld state)
+  (let* ((anc (canonical-ancestors-lst (list recog-name) wrld))
+         (bad-attached-fns (attached-fns anc wrld)))
+    (if bad-attached-fns
+        (er soft ctx
+            "The defstobj event is illegal because the stobj recognizer would ~
+             depend on a function, ~x0, that has an attachment. See :DOC ~
+             stobj-attachment-restrictions." (car bad-attached-fns))
+      (value nil))))
+
+(defun put-defstobj-attachments-disallowed (name recog-name wrld state)
+  (let* ((anc (canonical-ancestors-lst (list recog-name) wrld)))
+    (mark-attachment-disallowed anc name :defstobj wrld (w state))))
+         
+
+
 (defun defstobj-fn (name args state event-form)
 
 ; Warning: If this event ever generates proof obligations (other than those
@@ -20690,7 +20706,7 @@
                                          t ; might as well do make-event check
                                          (f-get-global 'cert-data state)
                                          ctx state)
-
+                (chk-defstobj-attachments recog-name ctx (w state) state)
 
 ; The processing above will define the functions in the logic, using
 ; defun, and that, in turn, will define their *1* counterparts in
@@ -20725,52 +20741,55 @@
                         (and congruent-to
                              (congruent-stobj-rep congruent-to wrld2)))
                        (wrld3
-                        (put-defstobj-invariant-risk
-                         field-templates
-                         (putprop
-                          name 'congruent-stobj-rep congruent-stobj-rep
-                          (putprop-unless
-                           name 'non-memoizable non-memoizable nil
-                           (putprop
+                        (put-defstobj-attachments-disallowed
+                         name recog-name
+                         (put-defstobj-invariant-risk
+                          field-templates
+                          (putprop
+                           name 'congruent-stobj-rep congruent-stobj-rep
+                           (putprop-unless
+                            name 'non-memoizable non-memoizable nil
+                            (putprop
 
 ; Here I declare that name is Common Lisp compliant.  Below I similarly declare
 ; the-live-var.  All elements of the namex list of an event must have the same
 ; symbol-class.
 
-                            name 'symbol-class :common-lisp-compliant
-                            (put-stobjs-in-and-outs
-                             name template
+                             name 'symbol-class :common-lisp-compliant
+                             (put-stobjs-in-and-outs
+                              name template
 
 ; Rockwell Addition: It is convenient for the recognizer to be in a
 ; fixed position in this list, so I can find out its name.
 
-                             (putprop
-                              name 'stobj
-                              (make stobj-property
-                                    :live-var the-live-var
-                                    :recognizer recog-name
-                                    :creator creator-name
-                                    :names
+                              (putprop
+                               name 'stobj
+                               (make stobj-property
+                                     :live-var the-live-var
+                                     :recognizer recog-name
+                                     :creator creator-name
+                                     :names
 ; See the comment in the binding of names above.
-                                    (append (set-difference-eq
-                                             names
-                                             (list recog-name
-                                                   creator-name))
-                                            field-const-names))
-                              (putprop-x-lst1
-                               names 'stobj-function name
+                                     (append (set-difference-eq
+                                              names
+                                              (list recog-name
+                                                    creator-name))
+                                             field-const-names))
                                (putprop-x-lst1
-                                field-const-names 'stobj-constant name
-                                (putprop
-                                 the-live-var 'stobj-live-var name
+                                names 'stobj-function name
+                                (putprop-x-lst1
+                                 field-const-names 'stobj-constant name
                                  (putprop
-                                  the-live-var 'symbol-class
-                                  :common-lisp-compliant
+                                  the-live-var 'stobj-live-var name
                                   (putprop
-                                   name
-                                   'accessor-names
-                                   (accessor-array name field-names)
-                                   wrld2))))))))))))
+                                   the-live-var 'symbol-class
+                                   :common-lisp-compliant
+                                   (putprop
+                                    name
+                                    'accessor-names
+                                    (accessor-array name field-names)
+                                    wrld2)))))))))))
+                         state))
                        (discriminator
                         (cons 'defstobj
                               (make
@@ -21810,7 +21829,9 @@
                               name
                               &key
                               foundation
-                              recognizer creator corr-fn exports
+                              recognizer creator corr-fn
+                              corr-fn-exists
+                              exports
                               protect-default
                               congruent-to non-executable attachable
                               missing-only)
@@ -21822,6 +21843,7 @@
         (list 'quote recognizer)
         (list 'quote creator)
         (list 'quote corr-fn)
+        (list 'quote corr-fn-exists)
         (list 'quote exports)
         (list 'quote protect-default)
         (list 'quote congruent-to)
@@ -21846,7 +21868,9 @@
                                              &key
                                              foundation
                                              recognizer creator
-                                             corr-fn exports protect-default
+                                             corr-fn
+                                             corr-fn-exists
+                                             exports protect-default
                                              congruent-to non-executable
                                              attachable)
   (declare (xargs :guard (symbolp name)))
@@ -21857,6 +21881,7 @@
           (list 'quote recognizer)
           (list 'quote creator)
           (list 'quote corr-fn)
+          (list 'quote corr-fn-exists)
           (list 'quote exports)
           (list 'quote protect-default)
           (list 'quote congruent-to)
@@ -23211,7 +23236,8 @@
                      (t (mv nil accessors updaters))))))))
 
 (defun chk-acceptable-defabsstobj (name st$c recognizer st$ap creator
-                                        corr-fn exports protect-default
+                                        corr-fn corr-fn-exists
+                                        exports protect-default
                                         congruent-to non-executable
                                         see-doc ctx wrld state)
 
@@ -23269,6 +23295,15 @@
     (er soft ctx
         "DEFABSSTOBJ requires the :NON-EXECUTABLE keyword argument to have a ~
          Boolean value.  See :DOC defabsstobj."))
+   ((and (not congruent-to)
+         corr-fn-exists
+         (not (and (symbolp corr-fn)
+                   (function-symbolp corr-fn wrld))))
+    (er soft ctx
+        "If :CORR-FN-EXISTS is set to T, then DEFABSSTOBJ requires that the ~
+         CORR-FN is a nonlocal function symbol. Otherwise,additional ~
+         restrictions apply to the creator and exported functions; ~ see :DOC ~
+         stobj-attachment-restrictions."))
    (t
     (er-progn
      (chk-all-but-new-name name ctx 'stobj wrld state)
@@ -23823,7 +23858,48 @@
   (let ((old-to-new (pairlis$ (export-names old) (export-names new))))
     (fix-export-updaters1 old old-to-new)))
 
-(defun defabsstobj-fn1 (st-name st$c recognizer creator corr-fn exports
+
+(defun chk-defabsstobj-attachments (corr-fn-exists corr-fn recognizer creator exports congruent-to ctx wrld state)
+  (if congruent-to
+      ;; If congruent to another abstract stobj, that abstract stobj has
+      ;; already checked for attachments on the ancestors and disallowed them.
+      (value nil)
+    (let* ((recognizer (if (consp recognizer) (car recognizer) recognizer))
+           (lst (if corr-fn-exists
+                    (list corr-fn recognizer)
+                  (list* recognizer
+                         (if (consp creator) (car creator) creator)
+                         (export-names exports))))
+           (anc (canonical-ancestors-lst lst wrld))
+           (bad-attached-fns (attached-fns anc wrld)))
+      (if bad-attached-fns
+          (er soft ctx
+              "The defabsstobj event is illegal because function ~x0, which has ~
+             an attachment, is an ancestor of either ~s1. See :DOC ~
+             stobj-attachment-restrictions."
+              (car bad-attached-fns)
+              (if corr-fn-exists
+                  "the correlation or recognizer function"
+                "the recognizer, creator, or some exported function"))
+        (value nil)))))
+
+(defun put-defabsstobj-attachments-disallowed (name corr-fn-exists corr-fn recognizer creator exports congruent-to wrld state)
+  (if congruent-to
+      ;; If congruent to another abstract stobj, that abstract stobj has
+      ;; already disallowed attachments on all the logical functions'
+      ;; ancestors.
+      wrld
+    (let* ((recognizer (if (consp recognizer) (car recognizer) recognizer))
+           (anc (canonical-ancestors-lst (if corr-fn-exists
+                                             (list corr-fn recognizer)
+                                           (list* recognizer
+                                                  (if (consp creator) (car creator) creator)
+                                                  (export-names exports)))
+                                         wrld)))
+      (mark-attachment-disallowed anc name (if corr-fn-exists :defabsstobj :defabsstobj-no-corr)
+                                  wrld (w state)))))
+
+(defun defabsstobj-fn1 (st-name st$c recognizer creator corr-fn corr-fn-exists exports
                                 protect-default congruent-to non-executable
                                 attachable missing-only ctx state event-form
                                 discriminator
@@ -23892,7 +23968,7 @@
                       st$c recognizer creator exports protect-default see-doc
                       ctx wrld0 state)
                    (chk-acceptable-defabsstobj
-                    st-name st$c recognizer st$ap creator corr-fn exports
+                    st-name st$c recognizer st$ap creator corr-fn corr-fn-exists exports
                     protect-default congruent-to non-executable see-doc ctx
                     wrld0 state))))
         (let* ((missing (car missing/methods/wrld1))
@@ -24050,6 +24126,8 @@
                           (f-get-global 'cert-data state)
                           ctx state)
 
+                         (chk-defabsstobj-attachments corr-fn-exists corr-fn recognizer creator exports congruent-to ctx (w state) state)
+
 ; The processing above will install defun events but defers installation of raw
 ; Lisp definitions, just as for defstobj.
 
@@ -24061,32 +24139,34 @@
                                 (non-memoizable
                                  (getpropc st$c 'non-memoizable nil wrld2))
                                 (wrld3
-                                 (put-defabsstobj-invariant-risk
-                                  methods
-                                  (putprop
-                                   st-name-new 'congruent-stobj-rep
-                                   congruent-stobj-rep
-                                   (putprop-unless
-                                    st-name-new 'non-memoizable
-                                    non-memoizable nil
+                                 (put-defabsstobj-attachments-disallowed
+                                  st-name corr-fn-exists corr-fn recognizer creator exports congruent-to
+                                  (put-defabsstobj-invariant-risk
+                                   methods
+                                   (putprop
+                                    st-name-new 'congruent-stobj-rep
+                                    congruent-stobj-rep
                                     (putprop-unless
-                                     st-name-new 'non-executablep
-                                     non-executable nil
-                                     (putprop
-                                      st-name-new 'absstobj-info
-                                      (make absstobj-info
-                                            :st$c st$c
-                                            :absstobj-tuples
-                                            absstobj-tuples)
+                                     st-name-new 'non-memoizable
+                                     non-memoizable nil
+                                     (putprop-unless
+                                      st-name-new 'non-executablep
+                                      non-executable nil
                                       (putprop
-                                       st-name-new 'symbol-class
-                                       :common-lisp-compliant
-                                       (put-absstobjs-in-and-outs
-                                        st-name-new methods
-                                        (putprop
-                                         st-name-new 'stobj
-                                         (make stobj-property
-                                               :live-var the-live-var
+                                       st-name-new 'absstobj-info
+                                       (make absstobj-info
+                                             :st$c st$c
+                                             :absstobj-tuples
+                                             absstobj-tuples)
+                                       (putprop
+                                        st-name-new 'symbol-class
+                                        :common-lisp-compliant
+                                        (put-absstobjs-in-and-outs
+                                         st-name-new methods
+                                         (putprop
+                                          st-name-new 'stobj
+                                          (make stobj-property
+                                                :live-var the-live-var
 
 ; We know that the first two members of names are the recognizer and creator,
 ; respectively.  The remaining names need to be put into proper order for the
@@ -24095,22 +24175,23 @@
 ; absstobj-field-fn-of-stobj-type-p): each updater must immediately follow the
 ; corresponding accessor in the :names field.
 
-                                               :recognizer (car names)
-                                               :creator (cadr names)
-                                               :names
-                                               (sort-absstobj-names
-                                                (cddr names)
-                                                accessors
-                                                updaters))
-                                         (putprop-x-lst1
-                                          names 'stobj-function st-name-new
-                                          (putprop
-                                           the-live-var 'stobj-live-var
-                                           st-name-new
+                                                :recognizer (car names)
+                                                :creator (cadr names)
+                                                :names
+                                                (sort-absstobj-names
+                                                 (cddr names)
+                                                 accessors
+                                                 updaters))
+                                          (putprop-x-lst1
+                                           names 'stobj-function st-name-new
                                            (putprop
-                                            the-live-var 'symbol-class
-                                            :common-lisp-compliant
-                                            wrld2))))))))))))
+                                            the-live-var 'stobj-live-var
+                                            st-name-new
+                                            (putprop
+                                             the-live-var 'symbol-class
+                                             :common-lisp-compliant
+                                             wrld2)))))))))))
+                                  state))
                                 (discriminator1
                                  (or
                                   discriminator
@@ -24171,6 +24252,7 @@
                                     (cadr (assoc-keyword :recognizer kwa))
                                     (cadr (assoc-keyword :creator kwa))
                                     :irrelevant ; corr-fn
+                                    nil ; corr-fn-exists
                                     (fix-export-updaters
                                      (cadr (assoc-keyword :exports kwa))
                                      exports)
@@ -24201,7 +24283,7 @@
                                               wrld4
                                               state)))))))))))))))))))))))))
 
-(defun defabsstobj-fn (st-name st$c recognizer creator corr-fn exports
+(defun defabsstobj-fn (st-name st$c recognizer creator corr-fn corr-fn-exists exports
                                protect-default congruent-to non-executable
                                attachable missing-only state event-form)
 
@@ -24222,7 +24304,7 @@
          "The value of the :ATTACHABLE keyword for DEFABSSTOBJ must be ~x0 or ~
           ~x1.  The value ~x2 is thus illegal."
          t nil attachable))
-    (t (defabsstobj-fn1 st-name st$c recognizer creator corr-fn exports
+    (t (defabsstobj-fn1 st-name st$c recognizer creator corr-fn corr-fn-exists exports
          protect-default congruent-to non-executable attachable missing-only
          ctx state event-form nil nil nil)))))
 
@@ -29813,13 +29895,11 @@
                                     (cadr at-alist))))
                             (rule-name (assert$ (consp pair)
                                                 (car pair)))
-                            (rule-class (cdr pair))
-                            (meta-fn (assert$ (member-eq rule-class
-                                                         '(:meta
-                                                           :clause-processor))
-                                              (if (eq rule-class :meta)
-                                                  "meta"
-                                                "clause-processor"))))
+                            (rule-class (cdr pair)))
+                       (if (member-eq rule-class '(:meta :clause-processor))
+                           (let ((meta-fn (if (eq rule-class :meta)
+                                              "meta"
+                                            "clause-processor")))
 
 ; It would be polite to print ancestor paths here as we do when the error comes
 ; from the rule instead (after a successful defattach).  But we don't have the
@@ -29827,13 +29907,28 @@
 ; by storing them with the 'attachment property instead of just the at-alist
 ; mapping rule-names to their rule-classes.
 
-                       (er soft ctx
-                           "It is illegal to attach to the function symbol ~
-                            ~x0 because it is a common ancestor of the ~
-                            evaluator and ~@1 functions of the ~x2 rule, ~x3. ~
-                            ~ See :DOC evaluator-restrictions and see :DOC ~
-                            transparent-functions."
-                           f meta-fn rule-class rule-name)))
+                             (er soft ctx
+                                 "It is illegal to attach to the function ~
+                                  symbol ~x0 because it is a common ancestor ~
+                                  of the evaluator and ~@1 functions of the ~
+                                  ~x2 rule, ~x3. ~ See :DOC ~
+                                  evaluator-restrictions and see :DOC ~
+                                  transparent-functions."
+                                 f meta-fn rule-class rule-name))
+                         (assert$
+                          (member-eq rule-class '(:defstobj :defabsstobj :defabsstobj-no-corr))
+                          (er soft ctx
+                              "It is illegal to attach to the function symbol ~
+                               ~x0 because it is an ancestor of ~s1 of ~
+                               the ~s2stobj ~x3. See :DOC ~
+                               stobj-attachment-restrictions."
+                              f
+                              (case rule-class
+                                (:defstobj "the recognizer")
+                                (:defabsstobj "the recognizer or correlation function")
+                                (otherwise "the recognizer, creator, or an exported function"))
+                              (if (eq rule-class :defstobj) "" "abstract ")
+                              rule-name)))))
                     (t ; at-alist is a legitimate attachment alist
                      (let* ((erasures (cond ((consp at-alist)
                                              (append at-alist erasures))
