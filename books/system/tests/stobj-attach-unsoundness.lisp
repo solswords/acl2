@@ -434,7 +434,7 @@
   (if (p st3$a) st3$a nil))
 
 ;; Correlation: the logic version equals the fld3 of the exec version,
-;; and that satisfiers (or (not x) (p x)).
+;; and that satisfies (or (not x) (p x)).
 (defun corr3 (st3$c x)
   (declare (xargs :Stobjs st3$c))
   (and (or (not x) (p x))
@@ -480,3 +480,120 @@
  :with-output-off nil)
 
 
+
+;; ---------------------------------------------------------------------
+;; Fifth variant of the soundness bug: here the correlation function
+;; depends on the attachment, but the logical sides of the exports don't --
+;; but we can still get an unsoundness from the executable parts depending on
+;; the attachment.
+;; ---------------------------------------------------------------------
+
+(defstobj st4$c
+  (fld4$c :initially nil))
+
+;; Restricted form of updater: only update if val satisfies
+;; (or (not val) (p val)).
+(defun update-fld4-restr$c (val st4$c)
+  (declare (xargs :stobjs st4$c))
+  (if (or (not val) (p val))
+      (update-fld4$c val st4$c)
+    st4$c))
+
+;; This is what we'll show the conflict on -- the abstract version of this will
+;; always return T since what we're checking here is supposed to be an
+;; invariant.
+(defun fld4-check$c (st4$c)
+  (declare (xargs :stobjs st4$c))
+  (let ((val (fld4$c st4$c)))
+    (and (or (not val) (p val)) t)))
+
+;; For the abstract version of this, we'll just always return T from the
+;; fld4-check function, and the stobj will always be nil (but irrelevant).
+(defun create-st4$a ()
+  (declare (xargs :guard t))
+  nil)
+(defun st4$ap (st4$a)
+  (declare (xargs :guard t)
+           (ignore st4$a))
+  t)
+(defun update-fld4$a (val st4$a)
+  (declare (ignore val st4$a)
+           (xargs :guard t))
+  nil)
+(defun fld4-check$a (st4$a)
+  (declare (xargs :guard t)
+           (ignore st4$a))
+  t)
+
+(defun corr4 (st4$c st4$a)
+  (declare (xargs :stobjs st4$c)
+           (ignore st4$a))
+  (fld4-check$c st4$c))
+
+
+(must-fail
+ (progn
+   (defattach p integerp)
+   (stobjs::defabsstobj-events st4
+     :foundation st4$c
+     :recognizer (st4p :logic st4$ap :exec st4$cp)
+     :creator (create-st4 :logic create-st4$a :exec create-st4$c)
+     :corr-fn corr4 :corr-fn-exists nil
+     :exports ((fld4-check :logic fld4-check$a :exec fld4-check$c)
+               (update-fld4 :logic update-fld4$a :exec update-fld4-restr$c)))))
+
+(must-fail
+ (progn
+   (stobjs::defabsstobj-events st4
+     :foundation st4$c
+     :recognizer (st4p :logic st4$ap :exec st4$cp)
+     :creator (create-st4 :logic create-st4$a :exec create-st4$c)
+     :corr-fn corr4 :corr-fn-exists nil
+     :exports ((fld4-check :logic fld4-check$a :exec fld4-check$c)
+               (update-fld4 :logic update-fld4$a :exec update-fld4-restr$c)))
+   (defattach p integerp)))
+
+
+(must-fail
+ (progn
+   (stobjs::defabsstobj-events st4
+     :foundation st4$c
+     :recognizer (st4p :logic st4$ap :exec st4$cp)
+     :creator (create-st4 :logic create-st4$a :exec create-st4$c)
+     :corr-fn corr4 ;; :corr-fn-exists nil
+     :exports ((fld4-check :logic fld4-check$a :exec fld4-check$c)
+               (update-fld4 :logic update-fld4$a :exec update-fld4-restr$c)))
+   (defattach p integerp)
+   (make-event
+    (let* ((st4 (update-fld4 -1 st4)))
+      (mv nil '(value-triple :ok) state st4)))
+
+   (defattach p natp)
+
+   (assert-event (not (fld4-check st4)))
+
+   ;; Evaluator for use in the following clause proc
+   (defevaluator my-ev4 my-ev4-lst
+     ((not x)
+      (if x y z)))
+
+   (defun my-cp4 (clause hint st4)
+     (declare (xargs :stobjs st4)
+              (ignore hint))
+     (mv nil
+         (if (fld4-check st4)
+             (list clause)
+           nil)
+         st4))
+
+   (defthm my-cp4-correct
+     (implies (and (pseudo-term-listp clause)
+                   (alistp a)
+                   (my-ev4 (conjoin-clauses (clauses-result (my-cp4 clause hint st4))) a))
+              (my-ev4 (disjoin clause) a))
+     :rule-classes :clause-processor)
+
+   (defthm bad4
+     nil
+     :hints (("goal" :clause-processor (my-cp4 clause nil st4)))
+     :rule-classes nil)))
