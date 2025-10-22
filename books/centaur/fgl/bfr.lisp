@@ -802,8 +802,8 @@ bfrstate object.  If no bfrstate object is supplied, the variable named
     (implies (and (fgl-bfr-object-p test)
                   (fgl-bfr-object-p then)
                   (fgl-bfr-object-p else))
-             (fgl-bfr-object-p (g-ite test then else)))
-    :hints (("goal" :expand ((fgl-bfr-object-p (g-ite test then else))))))
+             (fgl-bfr-object-p (g-ite test then else splitp)))
+    :hints (("goal" :expand ((fgl-bfr-object-p (g-ite test then else splitp))))))
 
   (defthm fgl-bfr-object-p-of-g-apply
     (implies (and (fgl-bfr-objectlist-p args))
@@ -887,7 +887,8 @@ bfrstate object.  If no bfrstate object is supplied, the variable named
            :g-integer (g-integer (bfr-list-fix x.bits))
            :g-ite (g-ite (fgl-bfr-object-fix x.test)
                          (fgl-bfr-object-fix x.then)
-                         (fgl-bfr-object-fix x.else))
+                         (fgl-bfr-object-fix x.else)
+                         x.splitp)
            :g-apply (g-apply x.fn (fgl-bfr-objectlist-fix x.args))
            :g-var (g-var x.name)
            :g-cons (g-cons (fgl-bfr-object-fix x.car)
@@ -1135,7 +1136,7 @@ bfrstate object.  If no bfrstate object is supplied, the variable named
            (acl2::true-list-fix bits)))
 
   (defthm fgl-object-bfrlist-of-g-ite
-    (equal (fgl-object-bfrlist (g-ite test then else))
+    (equal (fgl-object-bfrlist (g-ite test then else splitp))
            (append (fgl-object-bfrlist test)
                    (append (fgl-object-bfrlist then)
                            (fgl-object-bfrlist else)))))

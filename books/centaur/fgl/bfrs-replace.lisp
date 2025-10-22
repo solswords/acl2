@@ -51,7 +51,7 @@
         :g-ite (b* (((mv test bfrs) (fgl-object-replace-bfrlist x.test bfrs))
                     ((mv then bfrs) (fgl-object-replace-bfrlist x.then bfrs))
                     ((mv else bfrs) (fgl-object-replace-bfrlist x.else bfrs)))
-                 (mv (g-ite test then else) bfrs))
+                 (mv (g-ite test then else x.splitp) bfrs))
         :g-apply (b* (((mv args bfrs) (fgl-objectlist-replace-bfrlist x.args bfrs)))
                    (mv (g-apply x.fn args) bfrs))
         :g-var (mv x bfrs)

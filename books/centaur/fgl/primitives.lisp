@@ -60,7 +60,7 @@
 ;;    typespec-check implies fgl-sat-check))
 
 (def-formula-checks primitives-formula-checks
-  (if! atom ifix bool-fix$inline mv-nth binary-append nthcdr take len acl2::list-to-tree))
+  (if! if!! atom ifix bool-fix$inline mv-nth binary-append nthcdr take len acl2::list-to-tree))
 
 (enable-split-ifs equal)
 
@@ -392,20 +392,29 @@
 
   (local (add-default-hints
           '((and stable-under-simplificationp
-                 '(:in-theory (enable if!))))))
+                 '(:in-theory (enable if! if!!))))))
 
   (local (in-theory (disable acl2::booleanp-of-car-when-boolean-listp
                              acl2::integerp-of-car-when-integer-listp
                              bfr-listp$-when-subsetp-equal
                              equal-of-booleans-rewrite)))
          
-
+  
   (def-fgl-primitive if! (x y z)
     (b* (((mv ok x-fix) (gobj-syntactic-boolean-fix x))
-         ((unless ok) (g-ite x y z))
+         ((unless ok) (g-ite x y z nil))
          ((when (fgl-object-case x-fix :g-concrete))
           (if (g-concrete->val x-fix) y z)))
-      (g-ite x-fix y z))
+      (g-ite x-fix y z nil))
+    :returns ans
+    :formula-check primitives-formula-checks)
+
+  (def-fgl-primitive if!! (x y z)
+    (b* (((mv ok x-fix) (gobj-syntactic-boolean-fix x))
+         ((unless ok) (g-ite x y z t))
+         ((when (fgl-object-case x-fix :g-concrete))
+          (if (g-concrete->val x-fix) y z)))
+      (g-ite x-fix y z t))
     :returns ans
     :formula-check primitives-formula-checks))
 

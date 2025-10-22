@@ -703,7 +703,7 @@
                   (equal (fgl-object-bindings-count (list (cons 'arg0 (g-ite->test x))
                                                           (cons 'arg1 (g-ite->then x))
                                                           (cons 'arg2 (g-ite->else x))))
-                         (fgl-object-count x)))
+                         (1- (fgl-object-count x))))
          :hints (("goal" :in-theory (enable fgl-object-count
                                             fgl-object-bindings-count)))))
 

@@ -52,6 +52,7 @@
      :g-boolean
      :g-integer
      :g-ite
+     :g-ite!
      :g-apply
      :g-var
      :g-map))
@@ -167,13 +168,16 @@ case you misspell @(':g-concrete').</p>
             the if-then-else of the evaluations of sub-objects test, then, and
             else.</p>
             <p>This could simply be replaced by @('(g-apply 'if test then else)').</p>"
-     :cond (eq (car x) :g-ite)
+     :cond (or (eq (car x) :g-ite)
+               (eq (car x) :g-ite!))
      :shape (and (consp (cdr x))
                  (consp (cddr x)))
      :fields ((test :type fgl-object :acc-body (cadr x))
               (then :type fgl-object :acc-body (caddr x))
-              (else :type fgl-object :acc-body (cdddr x)))
-     :ctor-body (cons :g-ite (cons test (cons then else)))
+              (else :type fgl-object :acc-body (cdddr x))
+              (splitp :type booleanp :acc-body (eq (car x) :g-ite!)))
+     :ctor-body (cons (if splitp :g-ite! :g-ite)
+                      (cons test (cons then else)))
      :type-name g-ite)
     (:g-apply
      :short "FGL object constructor for function calls."
@@ -503,7 +507,8 @@ case you misspell @(':g-concrete').</p>
                       (summarize-fgl-object x.cdr))
       :g-ite (g-ite (summarize-fgl-object x.test)
                     (summarize-fgl-object x.then)
-                    (summarize-fgl-object x.else))
+                    (summarize-fgl-object x.else)
+                    x.splitp)
       :otherwise (fgl-object-fix x)))
   (define summarize-fgl-objectlist ((x fgl-objectlist-p))
     :measure (fgl-objectlist-count x)

@@ -1,4 +1,4 @@
- ; FGL - A Symbolic Simulation Framework for ACL2
+; FGL - A Symbolic Simulation Framework for ACL2
 ; Copyright (C) 2018 Centaur Technology
 ;
 ; Contact:
@@ -2589,7 +2589,7 @@ registers are not used.</p>"
          :hints (("goal" :expand ((<prefix>-object-eval x env)))))
 
        (defthm <prefix>-object-eval-of-g-ite
-         (equal (<prefix>-object-eval (g-ite test then else) env)
+         (equal (<prefix>-object-eval (g-ite test then else splitp) env)
                 (if (<prefix>-object-eval test env)
                     (<prefix>-object-eval then env)
                   (<prefix>-object-eval else env))))

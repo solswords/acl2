@@ -319,6 +319,13 @@ rule.</p>")
 @(':g-ite') object instead of doing the usual merging process."
   (if x y z))
 
+(define if!! (x y z)
+  :parents (fgl-rewrite-rules)
+  :short "Function implementing IF that under FGL interpretation makes a
+@(':g-ite') object with the splitp property, forcing casesplits everywhere it is involved,
+instead of doing the usual merging process."
+  (if x y z))
+
 
 (define unconditional (x)
   :parents (fgl-rewrite-rule)
