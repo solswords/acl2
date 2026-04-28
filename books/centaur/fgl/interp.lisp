@@ -4393,7 +4393,12 @@
                      new-interp-st new-state)
         (fgl-interp-fncall-special-case
           (pseudo-fnsym-fix fn)
-          ((conditionalize-fn 3)
+          ((conditionalize1 2)
+           (fgl-interp-conditionalize (first args)
+                                      (second args)
+                                      (second args)
+                                      interp-st state))
+          ((conditionalize2 3)
            (fgl-interp-conditionalize (first args)
                                       (second args)
                                       (third args)
@@ -5393,8 +5398,8 @@
         :measure (list (nfix (interp-st->reclimit interp-st))
                        2020
                        (+ (pseudo-term-binding-count test)
-                          (pseudo-term-binding-count x)
-                          (pseudo-term-binding-count on-unreach))
+                          (max (pseudo-term-binding-count x)
+                               (pseudo-term-binding-count on-unreach)))
                        85)
         :returns (mv
                   (ans fgl-object-p)
@@ -5932,7 +5937,7 @@
              ((mv then-rules else-rules if-rules interp-st)
               (interp-st-if-rules thenfns elsefns interp-st state))
 
-
+             (interp-st (interp-st-push-scratch-fnsym 'fgl-interp-merge-branches-rewrite interp-st))
              (interp-st (interp-st-push-scratch-fgl-obj elseval interp-st))
              (interp-st (interp-st-push-scratch-fgl-obj thenval interp-st))
              (interp-st (interp-st-push-scratch-bfr testbfr interp-st))
@@ -5943,19 +5948,23 @@
                (reclimit (1- reclimit) reclimit))
               ((fgl-interp-value successp ans)
                (fgl-rewrite-try-rules3 then-rules else-rules if-rules 'if interp-st state)))
+             (interp-st (if (and (not successp) last-chancep)
+                            (fgl-interp-store-debug-info
+                             "If-then-else failed to merge -- see debug obj"
+                             (list :test testbfr
+                                   :then (fgl-object-fix thenval)
+                                   :else (fgl-object-fix elseval))
+                             interp-st)
+                          interp-st))
              (interp-st (interp-st-pop-scratch interp-st))
              ((mv testbfr interp-st) (interp-st-pop-scratch-bfr interp-st))
              ((mv thenval interp-st) (interp-st-pop-scratch-fgl-obj interp-st))
              ((mv elseval interp-st) (interp-st-pop-scratch-fgl-obj interp-st))
+             (interp-st (interp-st-pop-scratch interp-st))
              ;; ((when err)
              ;;  (mv nil interp-st state))
-             ((when successp)
-              (fgl-interp-value ans))
-             ((when last-chancep)
-              (fgl-interp-error :msg "If-then-else failed to merge -- see debug obj"
-                                :debug-obj (list :test testbfr
-                                                 :then (fgl-object-fix thenval)
-                                                 :else (fgl-object-fix elseval)))))
+             ((when (or successp last-chancep))
+              (fgl-interp-value ans)))
           (fgl-interp-merge-branch-subterms
            testbfr thenval elseval interp-st state)))
 
@@ -6016,12 +6025,19 @@
              ((when (fgl-interp-check-reclimit interp-st))
               (fgl-interp-error :msg (fgl-msg "The recursion limit ran out.")))
 
-
+             (interp-st (interp-st-push-scratch-fnsym 'fgl-interp-merge-branch-subterms interp-st))
+             (interp-st (interp-st-push-scratch-fnsym thenfn interp-st))
+             (interp-st (interp-st-push-scratch-fgl-objlist thenargs interp-st))
+             (interp-st (interp-st-push-scratch-fgl-objlist elseargs interp-st))
              ((interp-st-bind
                (reclimit (1- reclimit) reclimit)
                (equiv-contexts (fgl-interp-lambda-arglist-equiv-contexts (interp-st->equiv-contexts interp-st))))
               ((fgl-interp-recursive-call args)
                (fgl-interp-merge-branch-args testbfr thenargs elseargs interp-st state)))
+             (interp-st (interp-st-pop-scratch interp-st))
+             (interp-st (interp-st-pop-scratch interp-st))
+             (interp-st (interp-st-pop-scratch interp-st))
+             (interp-st (interp-st-pop-scratch interp-st))
 
              )
           (fgl-interp-fncall thenfn args interp-st state)))
@@ -6047,6 +6063,7 @@
              ;; (elsestack (interp-st->elseval-stack interp-st))
              ;; (elseval (car elsestack))
              ;; (interp-st (update-interp-st->elseval-stack (cdr elsestack) interp-st))
+             (interp-st (interp-st-push-scratch-fnsym 'fgl-interp-merge-branch-args interp-st))
              (interp-st (interp-st-push-scratch-fgl-objlist (cdr thenargs) interp-st))
              (interp-st (interp-st-push-scratch-fgl-objlist (cdr elseargs) interp-st))
              (interp-st (interp-st-push-scratch-bfr testbfr interp-st))
@@ -6055,6 +6072,7 @@
              ((mv testbfr interp-st) (interp-st-pop-scratch-bfr interp-st))
              ((mv rest-elseargs interp-st) (interp-st-pop-scratch-fgl-objlist interp-st))
              ((mv rest-thenargs interp-st) (interp-st-pop-scratch-fgl-objlist interp-st))
+             (interp-st (interp-st-pop-scratch interp-st))
 
              ((unless (mbt (eql (len (cdr thenargs)) (len rest-thenargs))))
               (fgl-interp-value nil))
@@ -9015,27 +9033,29 @@
   (defthm fgl-ev-context-equiv-forall-extensions-of-conditionalize-term-true
     (b* (((pseudo-term-fncall x)))
       (implies (and (pseudo-term-case x :fncall)
-                    (equal x.fn 'conditionalize-fn)
+                    (or (equal x.fn 'conditionalize1)
+                        (equal x.fn 'conditionalize2))
                     (equal (car x.args) (kwote ans))
                     (equal xterm (caddr x.args))
                     (fgl-ev-context-equiv-forall-extensions
                      contexts ans xterm alist))
                (fgl-ev-context-equiv-forall-extensions
                 contexts ans x alist)))
-    :hints (("goal" :in-theory (enable conditionalize))
+    :hints (("goal" :in-theory (enable conditionalize1 conditionalize2))
             ;; (acl2::witness :ruleset iff-forall)
             (acl2::witness :ruleset context-equiv-forall)))
 
   (defthm fgl-ev-context-equiv-forall-extensions-of-conditionalize-term-false
     (b* (((pseudo-term-fncall x)))
       (implies (and (pseudo-term-case x :fncall)
-                    (equal x.fn 'conditionalize-fn)
+                    (or (equal x.fn 'conditionalize1)
+                        (equal x.fn 'conditionalize2))
                     (equal (car x.args) (kwote ans))
                     (equal testterm (cadr x.args))
                     (iff?-forall-extensions contexts nil testterm alist))
                (fgl-ev-context-equiv-forall-extensions
                 contexts ans x alist)))
-    :hints (("goal" :in-theory (enable conditionalize))
+    :hints (("goal" :in-theory (enable conditionalize1 conditionalize2))
             ;; (acl2::witness :ruleset iff-forall)
             (acl2::witness :ruleset context-equiv-forall)))
 
