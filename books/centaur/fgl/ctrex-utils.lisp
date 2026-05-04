@@ -3148,7 +3148,9 @@ compute a value for @('x').</p>
                           warnings/errors from counterexample derivation ~
                           above.~%" ans))
                 (t   (cw "Counterexample verified!~%"))))
-       (interp-st (interp-st-check-bvar-db-ctrex-consistency interp-st state))
+       (interp-st (if config.counterexample-consistency-check-enabledp
+                      (interp-st-check-bvar-db-ctrex-consistency interp-st state)
+                    interp-st))
        (scratch (interp-st->user-scratch interp-st))
        ;; Collect counterexamples in the user scratch for later extraction
        (interp-st (update-interp-st->user-scratch
