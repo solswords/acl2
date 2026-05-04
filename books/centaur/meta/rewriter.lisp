@@ -30,6 +30,7 @@
 ; OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ; Author: Sol Swords <sol.swords@arm.com>
+; (assisted by Codex/GPT5.5)
 
 (in-package "CMR")
 
@@ -37,6 +38,7 @@
 (include-book "centaur/meta/unify" :dir :system)
 (include-book "centaur/meta/bindinglist" :dir :system)
 (include-book "centaur/meta/substitute" :dir :system)
+(include-book "centaur/fty/baselists" :dir :system)
 (include-book "std/alists/fast-alist-clean" :dir :system)
 (include-book "std/basic/two-nats-measure" :dir :system)
 (include-book "xdoc/top" :dir :system)
@@ -121,6 +123,8 @@
           "Rules, typically produced by @(see parse-rewrites-from-term).")
    (rules-by-fn crw-rewrite-rule-alist-p
                 "Rules organized by the leading function symbol of their LHS.")
+   (executable-fns symbol-listp
+                   "Function symbols that may be executed on ground arguments.")
    (assumptions pseudo-term-listp
                 "Terms assumed true while rewriting.")
    (repeat-limit natp
@@ -130,12 +134,14 @@
 (define crw-make-config ((rules rewritelist-p)
                            (assumptions pseudo-term-listp)
                            &key
+                           ((executable-fns symbol-listp) 'nil)
                            ((repeat-limit natp) '1000))
   :parents (crw-rewriter)
   :returns (config crw-rewrite-config-p)
   (make-crw-rewrite-config :rules rules
                              :rules-by-fn
                              (crw-organize-rules-by-lhs-fn rules)
+                             :executable-fns executable-fns
                              :assumptions assumptions
                              :repeat-limit repeat-limit))
 
@@ -586,7 +592,9 @@
   (defthm crw-config-okp-of-crw-make-config
     (implies (and (crw-rewrite-rules-validp rules)
                   (crw-ev (conjoin (pseudo-term-list-fix assumptions)) env))
-             (crw-config-okp (crw-make-config rules assumptions) env))
+             (crw-config-okp (crw-make-config rules assumptions
+                                               :executable-fns executable-fns)
+                             env))
     :hints(("Goal" :in-theory (enable crw-make-config)))))
 
 (local
@@ -811,6 +819,100 @@
   :hints (("goal" :in-theory (enable crw-simplify-term-by-assumptions)))
   :fn crw-simplify-term-by-assumptions)
 
+(define crw-pseudo-term-quote-listp ((x pseudo-term-listp))
+  :returns (ok booleanp :rule-classes :type-prescription)
+  (if (atom x)
+      t
+    (and (pseudo-term-case (car x) :quote)
+         (crw-pseudo-term-quote-listp (cdr x))))
+  ///
+
+  (defthm crw-pseudo-term-quote-listp-of-cdr
+    (implies (and (crw-pseudo-term-quote-listp x)
+                  (consp x))
+             (crw-pseudo-term-quote-listp (cdr x))))
+
+  (defthm crw-pseudo-term-kind-of-car-when-quote-listp
+    (implies (and (crw-pseudo-term-quote-listp x)
+                  (consp x))
+             (equal (pseudo-term-kind (car x)) :quote))))
+
+(define crw-pseudo-term-quote-list->vals ((x pseudo-term-listp))
+  :guard (crw-pseudo-term-quote-listp x)
+  :returns vals
+  (if (atom x)
+      nil
+    (cons (pseudo-term-quote->val (car x))
+          (crw-pseudo-term-quote-list->vals (cdr x)))))
+
+(defthm crw-ev-list-when-pseudo-term-quote-listp
+  (implies (crw-pseudo-term-quote-listp x)
+           (equal (crw-ev-list x env)
+                  (crw-pseudo-term-quote-list->vals x)))
+  :hints (("goal" :in-theory (enable crw-pseudo-term-quote-listp
+                                     crw-pseudo-term-quote-list->vals))))
+
+(define crw-maybe-execute-fncall ((fn pseudo-fnsym-p)
+                                  (args pseudo-term-listp)
+                                  (config crw-rewrite-config-p)
+                                  state)
+  :parents (crw-rewriter)
+  :short "Execute a configured function call whose arguments are quoted constants."
+  :returns (mv (successp booleanp :rule-classes :type-prescription)
+               (term pseudo-termp))
+  (b* ((fn (pseudo-fnsym-fix fn))
+       (args (pseudo-term-list-fix args))
+       ((unless (and (symbolp fn)
+                     (not (eq fn 'quote))
+                     (acl2::logicp fn (w state))
+                     (member-eq fn (crw-rewrite-config->executable-fns config))
+                     (crw-pseudo-term-quote-listp args)))
+        (mv nil nil))
+       ((mv err val)
+        (acl2::magic-ev-fncall
+         fn (crw-pseudo-term-quote-list->vals args) state t nil))
+       ((when err) (mv nil nil)))
+    (mv t (pseudo-term-quote val)))
+  ///
+
+  (local (defthm crw-ev-of-pseudo-term-fncall-when-quote-args
+           (implies (and (symbolp (pseudo-fnsym-fix fn))
+                         (not (eq (pseudo-fnsym-fix fn) 'quote))
+                         (crw-pseudo-term-quote-listp args))
+                    (equal (crw-ev (pseudo-term-fncall fn args) env)
+                           (crw-ev (cons (pseudo-fnsym-fix fn)
+                                         (kwote-lst
+                                          (crw-pseudo-term-quote-list->vals args)))
+                                   nil)))
+           :hints (("goal" :in-theory (enable crw-ev-of-fncall-args)))))
+
+  (local (defthm crw-ev-of-cons-when-quote-args
+           (implies (and (symbolp fn)
+                         (not (eq fn 'quote))
+                         (crw-pseudo-term-quote-listp args))
+                    (equal (crw-ev (cons fn args) env)
+                           (crw-ev (cons fn
+                                         (kwote-lst
+                                          (crw-pseudo-term-quote-list->vals args)))
+                                   nil)))
+           :hints (("goal" :in-theory (enable crw-ev-of-fncall-args)))))
+
+  (defret crw-maybe-execute-fncall-correct
+    (implies (and successp
+                  (crw-ev-meta-extract-global-facts))
+             (equal (crw-ev term env)
+                    (crw-ev (pseudo-term-fncall fn args) env)))
+    :hints (("goal"
+             :use ((:instance crw-ev-meta-extract-fncall
+                    (fn (pseudo-fnsym-fix fn))
+                    (arglist (crw-pseudo-term-quote-list->vals
+                              (pseudo-term-list-fix args)))
+                    (st state)))
+             :in-theory (e/d (crw-maybe-execute-fncall
+                              crw-pseudo-term-quote-listp
+                              crw-pseudo-term-quote-list->vals)
+                             (crw-ev-meta-extract-fncall))))))
+
 (define crw-simplify-fncall ((fn pseudo-fnsym-p)
                                (args pseudo-term-listp)
                                (iffp booleanp)
@@ -971,7 +1073,8 @@
                                         (subst pseudo-term-subst-p)
                                         (config crw-rewrite-config-p)
                                         (iffp booleanp)
-                                        (limit natp))
+                                        (limit natp)
+                                        state)
     :measure (list (nfix limit) (pseudo-term-binding-count x) 11 0)
     :hints (("goal" :in-theory (enable equal-of-len)))
     :ruler-extenders :all
@@ -988,36 +1091,38 @@
                  (crw-rewrite-if-under-subst (first x.args)
                                                (second x.args)
                                                (third x.args)
-                                               subst config iffp limit))
+                                               subst config iffp limit state))
                 (t
                  (b* ((args (crw-rewrite-termlist-under-subst
-                             x.args subst config limit))
+                             x.args subst config limit state))
                       (simp (crw-simplify-fncall x.fn args iffp config)))
-                   (crw-rewrite-top simp config iffp limit))))
+                   (crw-rewrite-top simp config iffp limit state))))
       :lambda (b* (((mv bindings body) (lambda-nest-to-bindinglist x))
                    (new-subst
-                    (crw-rewrite-bindinglist bindings subst config limit))
+                    (crw-rewrite-bindinglist bindings subst config limit state))
                    (body (crw-rewrite-term-under-subst
-                          body new-subst config iffp limit)))
-                (crw-rewrite-top body config iffp limit))))
+                          body new-subst config iffp limit state)))
+                (crw-rewrite-top body config iffp limit state))))
 
   (define crw-rewrite-termlist-under-subst ((x pseudo-term-listp)
                                               (subst pseudo-term-subst-p)
                                               (config crw-rewrite-config-p)
-                                              (limit natp))
+                                              (limit natp)
+                                              state)
     :measure (list (nfix limit) (pseudo-term-list-binding-count x) 11 0)
     :ruler-extenders :all
     :returns (new-x pseudo-term-listp)
     (if (atom x)
         nil
-      (cons (crw-rewrite-term-under-subst (car x) subst config nil limit)
+      (cons (crw-rewrite-term-under-subst (car x) subst config nil limit state)
             (crw-rewrite-termlist-under-subst
-             (cdr x) subst config limit))))
+             (cdr x) subst config limit state))))
 
   (define crw-rewrite-bindinglist ((x bindinglist-p)
                                      (subst pseudo-term-subst-p)
                                      (config crw-rewrite-config-p)
-                                     (limit natp))
+                                     (limit natp)
+                                     state)
     :measure (list (nfix limit) (bindinglist-count x) 11 0)
     :ruler-extenders :all
     :returns (new-subst pseudo-term-subst-p)
@@ -1025,9 +1130,9 @@
           (pseudo-term-subst-fix subst))
          ((binding x1) (car x))
          (args (crw-rewrite-termlist-under-subst
-                x1.args subst config limit))
+                x1.args subst config limit state))
          (new-subst (crw-extend-subst x1.formals args subst)))
-      (crw-rewrite-bindinglist (cdr x) new-subst config limit)))
+      (crw-rewrite-bindinglist (cdr x) new-subst config limit state)))
 
   (define crw-rewrite-if-under-subst ((test pseudo-termp)
                                         (then pseudo-termp)
@@ -1035,7 +1140,8 @@
                                         (subst pseudo-term-subst-p)
                                         (config crw-rewrite-config-p)
                                         (iffp booleanp)
-                                        (limit natp))
+                                        (limit natp)
+                                        state)
     :measure (list (nfix limit)
                    (+ (pseudo-term-binding-count test)
                       (pseudo-term-binding-count then)
@@ -1044,37 +1150,41 @@
                    0)
     :ruler-extenders :all
     :returns (new-x pseudo-termp)
-    (b* ((test2 (crw-rewrite-term-under-subst test subst config t limit))
+    (b* ((test2 (crw-rewrite-term-under-subst test subst config t limit state))
          ((when (crw-term-known-true-p
                  test2 (crw-rewrite-config->assumptions config)))
-          (crw-rewrite-term-under-subst then subst config iffp limit))
+          (crw-rewrite-term-under-subst then subst config iffp limit state))
          ((when (crw-term-known-false-p
                  test2 (crw-rewrite-config->assumptions config)))
-          (crw-rewrite-term-under-subst else subst config iffp limit))
+          (crw-rewrite-term-under-subst else subst config iffp limit state))
          (then-config (crw-config-add-assumption test2 config))
          (else-config (crw-config-add-assumption (crw-not-term test2) config))
          (then2 (crw-rewrite-term-under-subst
-                 then subst then-config iffp limit))
+                 then subst then-config iffp limit state))
          (else2 (crw-rewrite-term-under-subst
-                 else subst else-config iffp limit))
+                 else subst else-config iffp limit state))
          (simp (crw-simplify-fncall 'if (list test2 then2 else2) iffp config)))
-      (crw-rewrite-top simp config iffp limit)))
+      (crw-rewrite-top simp config iffp limit state)))
 
   (define crw-rewrite-top ((x pseudo-termp)
                              (config crw-rewrite-config-p)
                              (iffp booleanp)
-                             (limit natp))
+                             (limit natp)
+                             state)
     :measure (list (nfix limit) 0 8 0)
     :ruler-extenders :all
     :returns (new-x pseudo-termp)
     (b* (((unless (posp limit))
           (pseudo-term-fix x)))
       (pseudo-term-case x
-        :fncall (b* (((mv ok rhs) (crw-try-rewrites
+        :fncall (b* (((mv exec-ok exec-term)
+                      (crw-maybe-execute-fncall x.fn x.args config state))
+                     ((when exec-ok) exec-term)
+                     ((mv ok rhs) (crw-try-rewrites
                                    x.fn x.args
                                    (crw-rewrite-candidate-rules
                                     x.fn config)
-                                   config iffp limit))
+                                   config iffp limit state))
                      ((unless ok) (pseudo-term-fix x)))
                   rhs)
         :otherwise (pseudo-term-fix x))))
@@ -1084,23 +1194,25 @@
                               (rules rewritelist-p)
                               (config crw-rewrite-config-p)
                               (iffp booleanp)
-                              (limit natp))
+                              (limit natp)
+                              state)
     :measure (list (nfix limit) 0 7 (len rules))
     :ruler-extenders :all
     :returns (mv (successp booleanp :rule-classes :type-prescription)
                  (rhs pseudo-termp))
     (b* (((when (atom rules)) (mv nil nil))
          ((mv ok rhs) (crw-try-rewrite
-                       fn args (car rules) config iffp limit))
+                       fn args (car rules) config iffp limit state))
          ((when ok) (mv t rhs)))
-      (crw-try-rewrites fn args (cdr rules) config iffp limit)))
+      (crw-try-rewrites fn args (cdr rules) config iffp limit state)))
 
   (define crw-try-rewrite ((fn pseudo-fnsym-p)
                              (args pseudo-term-listp)
                              (rule rewrite-p)
                              (config crw-rewrite-config-p)
                              (iffp booleanp)
-                             (limit natp))
+                             (limit natp)
+                             state)
     :measure (list (nfix limit) 0 6 0)
     :ruler-extenders :all
     :returns (mv (successp booleanp :rule-classes :type-prescription)
@@ -1114,28 +1226,29 @@
          ((mv ok subst) (term-unify rule.lhs x nil))
          ((unless ok) (mv nil nil))
          ((unless (crw-relieve-hyps-under-subst
-                   rule.hyps subst config limit))
+                   rule.hyps subst config limit state))
           (mv nil nil))
          (rhs (crw-rewrite-term-under-subst
-               rule.rhs subst config iffp (1- limit))))
+               rule.rhs subst config iffp (1- limit) state)))
       (mv t rhs)))
 
   (define crw-relieve-hyps-under-subst ((hyps pseudo-term-listp)
                                           (subst pseudo-term-subst-p)
                                           (config crw-rewrite-config-p)
-                                          (limit natp))
+                                          (limit natp)
+                                          state)
     :measure (list (nfix limit) 0 5 (len hyps))
     :ruler-extenders :all
     :returns (ok booleanp :rule-classes :type-prescription)
     (b* (((when (atom hyps)) t)
          ((unless (posp limit)) nil)
          (hyp (crw-rewrite-term-under-subst
-               (car hyps) subst config t (1- limit)))
+               (car hyps) subst config t (1- limit) state))
          ((unless (crw-term-known-true-p
                    hyp
                    (crw-rewrite-config->assumptions config)))
           nil))
-      (crw-relieve-hyps-under-subst (cdr hyps) subst config limit)))
+      (crw-relieve-hyps-under-subst (cdr hyps) subst config limit state)))
 
   ///
 
@@ -1154,7 +1267,7 @@
   
   (std::defret-mutual <fn>-correct
     (defret <fn>-correct
-      (implies (and ;; (pseudo-term-subst-p subst)
+      (implies (and (crw-ev-meta-extract-global-facts)
                     (crw-config-okp config env))
                (equal (crw-iff-fix
                       iffp
@@ -1169,7 +1282,7 @@
               )
       :fn crw-rewrite-term-under-subst)
     (defret <fn>-correct
-      (implies (and ;; (pseudo-term-subst-p subst)
+      (implies (and (crw-ev-meta-extract-global-facts)
                     (crw-config-okp config env))
                (equal (crw-ev-list
                        new-x
@@ -1177,7 +1290,7 @@
                       (crw-ev-list x (crw-subst-env subst env))))
       :fn crw-rewrite-termlist-under-subst)
     (defret <fn>-correct
-      (implies (and ;; (pseudo-term-subst-p subst)
+      (implies (and (crw-ev-meta-extract-global-facts)
                     (crw-config-okp config env))
                (equal (crw-subst-env
                        new-subst
@@ -1191,7 +1304,7 @@
                                         crw-subst-env))))
       :fn crw-rewrite-bindinglist)
     (defret <fn>-correct
-      (implies (and ;; (pseudo-term-subst-p subst)
+      (implies (and (crw-ev-meta-extract-global-facts)
                     (crw-config-okp config env))
                (equal (crw-iff-fix
                        iffp
@@ -1201,15 +1314,12 @@
                       (crw-iff-fix
                        iffp
                        (let ((env (crw-subst-env subst env)))
-                         (crw-ev (pseudo-term-call 'if (list test then else)) env)
-                         ;; (if (crw-ev test env)
-                         ;;     (crw-ev then env)
-                         ;;   (crw-ev else env))
-                         ))))
+                         (crw-ev (pseudo-term-call 'if (list test then else)) env)))))
       :hints('(:in-theory (enable crw-ev-of-if-call)))
       :fn crw-rewrite-if-under-subst)
     (defret <fn>-correct
-      (implies (and (crw-config-okp config env))
+      (implies (and (crw-ev-meta-extract-global-facts)
+                    (crw-config-okp config env))
                (equal (crw-iff-fix
                        iffp
                        (crw-ev
@@ -1218,6 +1328,7 @@
       :fn crw-rewrite-top)
     (defret <fn>-correct
       (implies (and successp
+                    (crw-ev-meta-extract-global-facts)
                     (crw-config-okp config env)
                     (crw-rewrite-rules-validp rules))
                (equal (crw-iff-fix
@@ -1231,6 +1342,7 @@
       :fn crw-try-rewrites)
     (defret <fn>-correct
       (implies (and successp
+                    (crw-ev-meta-extract-global-facts)
                     (crw-config-okp config env)
                     (crw-rewrite-rule-validp rule))
                (equal (crw-iff-fix
@@ -1245,7 +1357,7 @@
     (defret <fn>-correct
       (implies (and (not (crw-ev (conjoin hyps)
                             (crw-subst-env subst env)))
-                    ;; (pseudo-term-subst-p subst)
+                    (crw-ev-meta-extract-global-facts)
                     (crw-config-okp config env))
                (not ok))
       :fn crw-relieve-hyps-under-subst)
@@ -1259,14 +1371,16 @@
 (define crw-rewrite-term ((x pseudo-termp)
                             (config crw-rewrite-config-p)
                             (iffp booleanp)
-                            (limit natp))
+                            (limit natp)
+                            state)
   :parents (crw-rewriter)
   :short "Rewrite a pseudo-term inside-out."
   :returns (new-x pseudo-termp)
-  (crw-rewrite-term-under-subst x nil config iffp limit)
+  (crw-rewrite-term-under-subst x nil config iffp limit state)
   ///
   (defret crw-rewrite-term-correct
-    (implies (and (crw-config-okp config env))
+    (implies (and (crw-ev-meta-extract-global-facts)
+                  (crw-config-okp config env))
              (equal (crw-iff-fix iffp (crw-ev new-x env))
                     (crw-iff-fix iffp (crw-ev x env))))
     :hints (("goal" :use ((:instance crw-rewrite-term-under-subst-correct
@@ -1277,7 +1391,8 @@
     :fn crw-rewrite-term)
 
   (defret crw-rewrite-term-correct-equal
-    (implies (and (crw-config-okp config env)
+    (implies (and (crw-ev-meta-extract-global-facts)
+                  (crw-config-okp config env)
                   (not iffp))
              (equal (crw-ev new-x env)
                     (crw-ev x env)))
@@ -1290,11 +1405,12 @@
 
 (define crw-rewrite-termlist ((x pseudo-term-listp)
                                 (config crw-rewrite-config-p)
-                                (limit natp))
+                                (limit natp)
+                                state)
   :parents (crw-rewriter)
   :short "Rewrite a pseudo-term list inside-out."
   :returns (new-x pseudo-term-listp)
-  (crw-rewrite-termlist-under-subst x nil config limit)
+  (crw-rewrite-termlist-under-subst x nil config limit state)
   ///
 
   (defret len-of-crw-rewrite-termlist
@@ -1303,7 +1419,8 @@
     :fn crw-rewrite-termlist)
 
   (defret crw-rewrite-termlist-correct
-    (implies (and (crw-config-okp config env))
+    (implies (and (crw-ev-meta-extract-global-facts)
+                  (crw-config-okp config env))
              (equal (crw-ev-list new-x env)
                     (crw-ev-list x env)))
     :hints (("goal" :use ((:instance crw-rewrite-termlist-under-subst-correct
@@ -1314,16 +1431,19 @@
     :fn crw-rewrite-termlist))
 
 (define crw-rewrite-under-iff ((x pseudo-termp)
-                                 (config crw-rewrite-config-p))
+                                 (config crw-rewrite-config-p)
+                                 state)
   :parents (crw-rewriter)
   :short "Rewrite a pseudo-term in a Boolean context."
   :returns (new-x pseudo-termp)
   (crw-rewrite-term x config t
-                      (crw-rewrite-config->repeat-limit config))
+                    (crw-rewrite-config->repeat-limit config)
+                    state)
   ///
 
   (defret crw-rewrite-under-iff-correct
-    (implies (and (crw-config-okp config env))
+    (implies (and (crw-ev-meta-extract-global-facts)
+                  (crw-config-okp config env))
              (iff (crw-ev new-x env)
                   (crw-ev x env)))
     :hints (("goal" :use ((:instance crw-rewrite-term-correct
@@ -1337,24 +1457,29 @@
 (define crw-rewrite-term-with-rules ((x pseudo-termp)
                                      (rules rewritelist-p)
                                      (assumptions pseudo-term-listp)
+                                     state
                                      &key
+                                     ((executable-fns symbol-listp) 'nil)
                                      ((repeat-limit natp) '1000))
   :parents (crw-rewriter)
   :short "Convenience wrapper for rewriting a term under rules and assumptions."
   :returns (new-x pseudo-termp)
   (b* ((config (crw-make-config rules assumptions
+                                :executable-fns executable-fns
                                 :repeat-limit repeat-limit)))
-    (crw-rewrite-term x config nil repeat-limit))
+    (crw-rewrite-term x config nil repeat-limit state))
   ///
 
   (defret crw-rewrite-term-with-rules-correct
-    (implies (and (crw-rewrite-rules-validp rules)
+    (implies (and (crw-ev-meta-extract-global-facts)
+                  (crw-rewrite-rules-validp rules)
                   (crw-ev (conjoin (pseudo-term-list-fix assumptions)) env))
              (equal (crw-ev new-x env)
                     (crw-ev x env)))
     :hints (("goal" :use ((:instance
                            crw-rewrite-term-correct
                            (config (crw-make-config rules assumptions
+                                                    :executable-fns executable-fns
                                                     :repeat-limit repeat-limit))
                            (iffp nil)
                            (limit repeat-limit)))
