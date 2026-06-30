@@ -702,17 +702,30 @@ the original namespace.</li>
                 (prog2$ (raise "~@0" err)
                         (svex-alist-fix x))
               ans))
+       ;; Why do we compose the composed alist once more with the original
+       ;; alist?  Sometimes, somehow, if bar has an apparent combinational loop
+       ;; and foo doesn't but depends on bar, we fail the override transparency
+       ;; syntax check for foo. This needs more investigation but is all
+       ;; resolved by composing the original assignments with the composed
+       ;; alist one more time (which, after all, only makes things bigger in
+       ;; cases where there are combinational loops).
+       (compos-ans (with-fast-alist ans
+                     (svex-alist-compose-rw
+                      x (make-svex-substconfig
+                         :simp (if rewrite 20 t)
+                         :alist ans))))
        (final-ans (b* ((vars (svex-alist-keys x))
                        (xes-alist (svarlist-x-subst vars)))
                     (with-fast-alist xes-alist (svex-alist-compose-rw
-                                                ans
+                                                compos-ans
                                                 (make-svex-substconfig
                                                  :simp (if rewrite 20 t)
                                                  :alist xes-alist))))))
     final-ans)
   ///
   (defret netevalcomp-p-of-<fn>
-    (netevalcomp-p xx x))
+    (netevalcomp-p xx x)
+    :hints(("Goal" :in-theory (disable SVEX-ALIST-COMPOSE-OF-SVEX-ALIST-COMPOSE))))
 
   (defret svex-alist-keys-of-<fn>
     (set-equiv (svex-alist-keys xx)
