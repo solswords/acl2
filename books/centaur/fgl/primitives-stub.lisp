@@ -30,10 +30,9 @@
 
 (in-package "FGL")
 
-(include-book "interp-st")
 (include-book "stack-ev")
 (include-book "scratch-isomorphic")
-(include-book "interp-st-bfrs-ok")
+(include-book "interp-st-bvar-db-ok")
 (include-book "centaur/meta/world-equiv" :dir :system)
 (local (std::add-default-post-define-hook :fix))
 
@@ -177,103 +176,7 @@
                     (interp-st-scratch-isomorphic old x)))))
 
 
-;; BOZO maybe doesn't belong here
-(Defsection interp-st-bvar-db-ok
-  (defun-sk interp-st-bvar-db-ok (interp-st env)
-    (forall n
-            (b* ((bvar-db (interp-st->bvar-db interp-st))
-                 (logicman (interp-st->logicman interp-st)))
-              (implies (and (<= (base-bvar$c bvar-db) (nfix n))
-                            (< (nfix n) (next-bvar$c bvar-db)))
-                       (iff* (fgl-object-eval (get-bvar->term$c n bvar-db) env logicman)
-                             (gobj-bfr-eval (bfr-var n) env logicman)))))
-    :rewrite :direct)
 
-  (in-theory (disable interp-st-bvar-db-ok))
-
-  (local (defthm bfr-listp-of-append-when-each
-           (implies (And (bfr-listp a)
-                         (bfr-listp b))
-                    (bfr-listp (append a b)))))
-
-  ;; (local (in-theory (disable not-member-of-append)))
-
-  (local (defthmd fgl-object-bfrlist-of-get-bvar->term$c-aux
-           (implies (and (not (member v (bvar-db-bfrlist-aux m bvar-db)))
-                         (< (nfix n) (nfix m))
-                         (<= (base-bvar$c bvar-db) (nfix n)))
-                    (not (member v (fgl-object-bfrlist (get-bvar->term$c n bvar-db)))))
-           :hints(("Goal" :in-theory (enable bvar-db-bfrlist-aux)))))
-
-  (local (defthm fgl-object-bfrlist-of-get-bvar->term$c
-           (implies (and (not (member v (bvar-db-bfrlist bvar-db)))
-                         (<= (base-bvar$c bvar-db) (nfix n))
-                         (< (nfix n) (next-bvar$c bvar-db)))
-                    (not (member v (fgl-object-bfrlist (get-bvar->term$c n bvar-db)))))
-           :hints (("goal" :in-theory (enable bvar-db-bfrlist)
-                    :use ((:instance fgl-object-bfrlist-of-get-bvar->term$c-aux
-                           (m (next-bvar$c bvar-db))))))))
-
-  (local (defthm bfr-listp-of-bvar-db-bfrlist-when-equal
-           (implies (and (equal bvar-db (interp-st->bvar-db interp-st))
-                         (interp-st-bfrs-ok interp-st))
-                    (bfr-listp (bvar-db-bfrlist bvar-db)
-                               (logicman->bfrstate (interp-st->logicman interp-st))))))
-
-  (local (in-theory (enable bfr-listp-when-not-member-witness)))
-  
-  (def-updater-independence-thm interp-st-bvar-db-ok-of-interp-st-logicman-extension
-    (implies (and (logicman-extension-p (interp-st->logicman new) (interp-st->logicman old))
-                  (interp-st-bfrs-ok old)
-                  (equal (interp-st->bvar-db new) (interp-st->bvar-db old)))
-             (iff (interp-st-bvar-db-ok new env)
-                  (interp-st-bvar-db-ok old env)))
-    :hints ((and stable-under-simplificationp
-                 (let* ((lit (assoc 'interp-st-bvar-db-ok clause))
-                        (other (if (eq (cadr lit) 'new) 'old 'new)))
-                   `(:expand (,lit)
-                     :use ((:instance interp-st-bvar-db-ok-necc
-                            (interp-st ,other)
-                            (n (interp-st-bvar-db-ok-witness . ,(cdr lit)))))
-                     :in-theory (e/d (bfr-varname-p)
-                                     (interp-st-bvar-db-ok-necc)))))))
-  
-  (defcong logicman-equiv equal (bfr-var n logicman) 2
-    :hints(("Goal" :in-theory (enable bfr-var))))
-
-  (local (std::make-returnspec-config :hints-sub-returnnames t))
-  
-  (defret interp-st-bvar-db-ok-of-interp-st-add-term-bvar
-    (implies (and (not (interp-st-bvar-db-ok interp-st env))
-                  (interp-st-bfrs-ok interp-st))
-             (not (interp-st-bvar-db-ok new-interp-st env)))
-    :hints(("Goal" :in-theory (e/d (interp-st-add-term-bvar
-                                    interp-st-bfrs-ok-implies
-                                    bfr-varname-p)
-                                   (interp-st-bvar-db-ok-necc))
-            :expand ((interp-st-bvar-db-ok interp-st env))
-            :use ((:instance interp-st-bvar-db-ok-necc
-                   (interp-st new-interp-st)
-                   (n (interp-st-bvar-db-ok-witness interp-st env))))
-            :cases ((bfr-varname-p (interp-st-bvar-db-ok-witness interp-st env)
-                                   (interp-st->logicman interp-st)))))
-    ;; :otf-flg t
-    :fn interp-st-add-term-bvar)
-
-  (defret interp-st-bvar-db-ok-of-interp-st-add-term-bvar-unique
-    (implies (and (not (interp-st-bvar-db-ok interp-st env))
-                  (interp-st-bfrs-ok interp-st))
-             (not (interp-st-bvar-db-ok new-interp-st env)))
-    :hints(("Goal" :in-theory (e/d (interp-st-add-term-bvar-unique bfr-varname-p)
-                                   (interp-st-bvar-db-ok-necc))
-            :expand ((interp-st-bvar-db-ok interp-st env))
-            :use ((:instance interp-st-bvar-db-ok-necc
-                   (interp-st new-interp-st)
-                   (n (interp-st-bvar-db-ok-witness interp-st env))))
-            :cases ((bfr-varname-p (interp-st-bvar-db-ok-witness interp-st env)
-                                   (interp-st->logicman interp-st)))))
-    :otf-flg t
-    :fn interp-st-add-term-bvar-unique))
 
 
 (defconst *fgl-meta-primitive-and-binder-rule-thms*

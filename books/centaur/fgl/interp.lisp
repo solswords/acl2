@@ -313,7 +313,7 @@
          :msg (fgl-msg "Syntax-interp error evaluating ~x0: ~@1"
                       (pseudo-term-quote->val untrans)
                       (if (or (consp err) (stringp err)) err "(no message)"))))
-       ((unless (fgl-bfr-object-p val (interp-st-bfr-state)))
+       ((unless (fgl-bfr-object-p val (interp-st-bfrstate)))
         (fgl-interp-error
          :msg (fgl-msg "Syntax-bind error: ~x0 evaluted to an illformed symbolic object, saved as debug object."
                       (pseudo-term-quote->val untrans))
@@ -774,7 +774,7 @@
        ((unless val)
         ;; No error -- bind-free evaluated to NIL which means just don't do the rewrite.
         (fgl-interp-value nil))
-       ((unless (fgl-bfr-object-bindings-p val (interp-st-bfr-state)))
+       ((unless (fgl-bfr-object-bindings-p val (interp-st-bfrstate)))
         (fgl-interp-error
          :msg (fgl-msg "Bind-free error: ~x0 evaluated to a non-FGL object alist: ~x1" untrans-form val)))
        (newly-bound-vars (alist-keys val))
@@ -939,8 +939,8 @@
                                    (+ (acl2-count (g-concrete->val then))
                                       (acl2-count (g-concrete->val else))))
 
-  :guard (and (fgl-bfr-object-p then (interp-st-bfr-state))
-              (fgl-bfr-object-p else (interp-st-bfr-state)))
+  :guard (and (fgl-bfr-object-p then (interp-st-bfrstate))
+              (fgl-bfr-object-p else (interp-st-bfrstate)))
 
 
   :prepwork ((local (include-book "primitive-lemmas"))
@@ -1071,7 +1071,7 @@
                (obj fgl-object-p)
                new-interp-st)
 
-  (b* ((bfrstate (interp-st-bfr-state))
+  (b* ((bfrstate (interp-st-bfrstate))
        (then (fgl-bfr-object-fix then))
        (else (fgl-bfr-object-fix else))
        ((when (equal (fgl-object-fix then)
@@ -3583,7 +3583,7 @@
        ((mv unify-ok bindings)
         ;; minor bindings should be irrelevant because we only do this at the toplevel of a hyp
         (fgl-unify-term/gobj hyp term (interp-st-bindings interp-st)
-                             (interp-st-bfr-state interp-st)))
+                             (interp-st-bfrstate)))
        ((unless unify-ok)
         (mv nil interp-st))
        (bfr (stobj-let ((logicman (interp-st->logicman interp-st)))
@@ -4010,7 +4010,7 @@
                                     state)
   :returns (mv (xobj fgl-object-p) new-interp-st
                (new-state (equal new-state state)))
-  :guard (interp-st-bfr-listp (fgl-object-bfrlist x))
+  :guard (fgl-object-bfrs-ok x (interp-st-bfrstate))
   (b* (((when (or dont
                   (not (fgl-term-obj-p x))
                   (interp-flags->hide (interp-st->flags interp-st))))
@@ -4036,7 +4036,7 @@
              (interp-st-bfrs-ok new-interp-st)))
 
   (defret lbfr-listp-of-<fn>
-    (implies (and (interp-st-bfr-listp (fgl-object-bfrlist x))
+    (implies (and (fgl-object-bfrs-ok x (interp-st-bfrstate))
                   (interp-st-bfrs-ok interp-st)
                   (logicman-extension-p logicman (interp-st->logicman interp-st)))
              (lbfr-listp (fgl-object-bfrlist xobj))))
@@ -4140,7 +4140,7 @@
                                                     (x fgl-object-p)
                                                     (interp-st interp-st-bfrs-ok)
                                                     state)
-        :guard (interp-st-bfr-listp (fgl-object-bfrlist x))
+        :guard (fgl-object-bfrs-ok x (interp-st-bfrstate))
         :measure (list (nfix (interp-st->reclimit interp-st)) 1600 0 0)
         :returns (mv (xobj fgl-object-p) new-interp-st new-state)
         (b* (((fgl-interp-value val)
@@ -4466,7 +4466,7 @@
                                           (interp-st interp-st-bfrs-ok)
                                           state)
 
-        :guard (interp-st-bfr-listp (fgl-objectlist-bfrlist args))
+        :guard (fgl-objectlist-bfrs-ok args (interp-st-bfrstate))
         :measure (list (nfix (interp-st->reclimit interp-st))
                        2010 0 12)
         :returns (mv (ans fgl-object-p)
@@ -4499,8 +4499,8 @@
                                                    (interp-st interp-st-bfrs-ok)
                                                    state)
 
-        :guard (and (interp-st-bfr-listp (fgl-objectlist-bfrlist then-args))
-                    (interp-st-bfr-listp (fgl-objectlist-bfrlist else-args)))
+        :guard (and (fgl-objectlist-bfrs-ok then-args (interp-st-bfrstate))
+                    (fgl-objectlist-bfrs-ok else-args (interp-st-bfrstate)))
         :measure (list (nfix (interp-st->reclimit interp-st))
                        2010 0 11)
         :returns (mv (ans fgl-object-p)
@@ -4532,7 +4532,7 @@
                                                 (args fgl-objectlist-p)
                                                 (interp-st interp-st-bfrs-ok)
                                                 state)
-        :guard (interp-st-bfr-listp (fgl-objectlist-bfrlist args))
+        :guard (fgl-objectlist-bfrs-ok args (interp-st-bfrstate))
         :measure (list (nfix (interp-st->reclimit interp-st))
                        2010 0 10)
         :returns (mv
@@ -4568,7 +4568,7 @@
                                 (args fgl-objectlist-p)
                                 (interp-st interp-st-bfrs-ok)
                                 state)
-        :guard (interp-st-bfr-listp (fgl-objectlist-bfrlist args))
+        :guard (fgl-objectlist-bfrs-ok args (interp-st-bfrstate))
         :measure (list (nfix (interp-st->reclimit interp-st))
                        1700 0 0)
         :returns (mv
@@ -4599,7 +4599,7 @@
                                  (dont)
                                  (interp-st interp-st-bfrs-ok)
                                  state)
-        :guard (interp-st-bfr-listp (fgl-objectlist-bfrlist args))
+        :guard (fgl-objectlist-bfrs-ok args (interp-st-bfrstate))
         :measure (list (nfix (interp-st->reclimit interp-st)) 0 0 0)
         :returns (mv successp
                      (ans fgl-object-p)
@@ -4627,7 +4627,7 @@
                                      state)
         :guard (and (< 0 (interp-st-scratch-len interp-st))
                     (scratchobj-case (interp-st-top-scratch interp-st) :fgl-objlist))
-        ;; :guard (interp-st-bfr-listp (fgl-objectlist-bfrlist args))
+        ;; :guard (fgl-objectlist-bfrs-ok args (interp-st-bfrstate))
         :measure (list (nfix (interp-st->reclimit interp-st)) 10000 (len rules) 0)
         :returns (mv successp
                      (ans fgl-object-p)
@@ -4667,7 +4667,7 @@
                                       (rhs-equiv equiv-contextsp)
                                       (interp-st interp-st-bfrs-ok)
                                       state)
-        :guard (interp-st-bfr-listp (fgl-object-bindings-bfrlist bindings))
+        :guard (fgl-object-bindings-bfrs-ok bindings (interp-st-bfrstate))
         :measure (list (nfix (interp-st->reclimit interp-st)) 10000 0 0)
         ;; Note: "Successp" is a misnomer here. It indicates to our callers
         ;; here that we should stop trying to apply rewrite rules, and just
@@ -4761,7 +4761,7 @@
                                       (pseudo-term-fncall->fn rule.lhs)
                                       (pseudo-term-call->args rule.lhs)
                                       fn args
-                                      nil (interp-st-bfr-state)))
+                                      nil (interp-st-bfrstate)))
              ((unless unify-ok) (fgl-interp-value nil nil))
              ((fgl-interp-value successp ans ?bindings)
               (fgl-rewrite-apply-rule
@@ -5033,7 +5033,7 @@
                                          (args fgl-objectlist-p)
                                          (interp-st interp-st-bfrs-ok)
                                          state)
-        :guard (interp-st-bfr-listp (fgl-objectlist-bfrlist args))
+        :guard (fgl-objectlist-bfrs-ok args (interp-st-bfrstate))
         :measure (list (nfix (interp-st->reclimit interp-st)) 0 0 0)
         :returns (mv successp
                      (ans fgl-object-p)
@@ -5059,7 +5059,7 @@
                                             state)
         :guard (and (< 0 (interp-st-scratch-len interp-st))
                     (scratchobj-case (interp-st-top-scratch interp-st) :fgl-objlist))
-        ;; :guard (interp-st-bfr-listp (fgl-objectlist-bfrlist args))
+        ;; :guard (fgl-objectlist-bfrs-ok args (interp-st-bfrstate))
         :measure (list (nfix (interp-st->reclimit interp-st)) 10000 (len rules) 0)
         :returns (mv successp
                      (ans fgl-object-p)
@@ -5111,7 +5111,7 @@
              ((mv unify-ok bindings) (fgl-unify-term/gobj-list rule.lhs-args
                                                                args
                                                                nil
-                                                               (interp-st-bfr-state)))
+                                                               (interp-st-bfrstate)))
              ((unless unify-ok) (fgl-interp-value nil nil))
              ((fgl-interp-value successp ans ?bindings)
               (fgl-rewrite-apply-rule
@@ -5558,7 +5558,7 @@
                                                 (xobj fgl-object-p)
                                                 (interp-st interp-st-bfrs-ok)
                                                 state)
-        :guard (interp-st-bfr-listp (fgl-object-bfrlist xobj))
+        :guard (fgl-object-bfrs-ok xobj (interp-st-bfrstate))
         :measure (list (nfix (interp-st->reclimit interp-st))
                        0
                        (fgl-object-count xobj)
@@ -5605,7 +5605,7 @@
                                             (xobj fgl-object-p)
                                             (interp-st interp-st-bfrs-ok)
                                             state)
-        :guard (interp-st-bfr-listp (fgl-object-bfrlist xobj))
+        :guard (fgl-object-bfrs-ok xobj (interp-st-bfrstate))
         :returns (mv
                   xbfr
                   new-interp-st new-state)
@@ -5630,7 +5630,7 @@
                                            (xobj fgl-object-p)
                                            (interp-st interp-st-bfrs-ok)
                                            state)
-        :guard (interp-st-bfr-listp (fgl-object-bfrlist xobj))
+        :guard (fgl-object-bfrs-ok xobj (interp-st-bfrstate))
         :returns (mv
                   xbfr
                   new-interp-st new-state)
@@ -5647,7 +5647,7 @@
                                               (interp-st interp-st-bfrs-ok)
                                               state)
         :guard (and (fgl-object-case xobj :g-ite)
-                    (interp-st-bfr-listp (fgl-object-bfrlist xobj)))
+                    (fgl-object-bfrs-ok xobj (interp-st-bfrstate)))
         :returns (mv
                   xbfr
                   new-interp-st new-state)
@@ -5690,7 +5690,7 @@
                                                   (interp-st interp-st-bfrs-ok)
                                                   state)
         :guard (and (fgl-object-case xobj :g-apply)
-                    (interp-st-bfr-listp (fgl-object-bfrlist xobj)))
+                    (fgl-object-bfrs-ok xobj (interp-st-bfrstate)))
 
         :measure (list (nfix (interp-st->reclimit interp-st))
                        1500
@@ -5788,7 +5788,7 @@
                                          (interp-st interp-st-bfrs-ok)
                                          state)
         :guard (and ;; (fgl-object-case xobj :g-apply)
-                    (interp-st-bfr-listp (fgl-object-bfrlist xobj)))
+                    (fgl-object-bfrs-ok xobj (interp-st-bfrstate)))
         :measure (list (nfix (interp-st->reclimit interp-st))
                        1400
                        (fgl-object-count xobj)
@@ -5796,7 +5796,7 @@
         :returns (mv new-interp-st new-state)
         (b* ((constraint-db (interp-st->constraint-db interp-st))
              ((mv constraint-substs constraint-db)
-              (gbc-process-new-lit xobj constraint-db (interp-st-bfr-state) state))
+              (gbc-process-new-lit xobj constraint-db (interp-st-bfrstate) state))
              (interp-st (update-interp-st->constraint-db constraint-db interp-st))
              ((unless constraint-substs) (fgl-interp-value))
              (reclimit (interp-st->reclimit interp-st))
@@ -5833,7 +5833,7 @@
       (define fgl-interp-add-constraints-for-substs ((substs constraint-instancelist-p)
                                                     (interp-st interp-st-bfrs-ok)
                                                     state)
-        :guard (interp-st-bfr-listp (constraint-instancelist-bfrlist substs))
+        :guard (constraint-instancelist-bfrs-ok substs (interp-st-bfrstate))
         :measure (list (nfix (interp-st->reclimit interp-st))
                        10000
                        (len substs)
@@ -5886,8 +5886,8 @@
                                         (elseval fgl-object-p)
                                         (interp-st interp-st-bfrs-ok)
                                         state)
-        :guard (and (interp-st-bfr-listp (fgl-object-bfrlist thenval))
-                    (interp-st-bfr-listp (fgl-object-bfrlist elseval)))
+        :guard (and (fgl-object-bfrs-ok thenval (interp-st-bfrstate))
+                    (fgl-object-bfrs-ok elseval (interp-st-bfrstate)))
         :measure (list (nfix (interp-st->reclimit interp-st))
                        2000 0 0)
         :returns (mv
@@ -5911,8 +5911,8 @@
                                                  (elseval fgl-object-p)
                                                  (interp-st interp-st-bfrs-ok)
                                                  state)
-        :guard (and (interp-st-bfr-listp (fgl-object-bfrlist thenval))
-                    (interp-st-bfr-listp (fgl-object-bfrlist elseval)))
+        :guard (and (fgl-object-bfrs-ok thenval (interp-st-bfrstate))
+                    (fgl-object-bfrs-ok elseval (interp-st-bfrstate)))
         :measure (list (nfix (interp-st->reclimit interp-st))
                        (if (interp-flags->if-merge-last-chance (interp-st->flags interp-st))
                            1700
@@ -5976,7 +5976,7 @@
                                       state)
         :guard (and (< 0 (interp-st-scratch-len interp-st))
                     (scratchobj-case (interp-st-top-scratch interp-st) :fgl-objlist))
-        ;; :guard (interp-st-bfr-listp (fgl-objectlist-bfrlist args))
+        ;; :guard (fgl-objectlist-bfrs-ok args (interp-st-bfrstate))
         :measure (list (nfix (interp-st->reclimit interp-st)) 20000 0 0)
         :returns (mv successp
                      (ans fgl-object-p)
@@ -5994,8 +5994,8 @@
                                                (elseval fgl-object-p)
                                                (interp-st interp-st-bfrs-ok)
                                                state)
-        :guard (and (interp-st-bfr-listp (fgl-object-bfrlist thenval))
-                    (interp-st-bfr-listp (fgl-object-bfrlist elseval)))
+        :guard (and (fgl-object-bfrs-ok thenval (interp-st-bfrstate))
+                    (fgl-object-bfrs-ok elseval (interp-st-bfrstate)))
         :measure (list (nfix (interp-st->reclimit interp-st))
                        1800 0 0)
         :returns (mv
@@ -6048,8 +6048,8 @@
                                            (interp-st interp-st-bfrs-ok)
                                            state)
         :guard (and (eql (len thenargs) (len elseargs))
-                    (interp-st-bfr-listp (fgl-objectlist-bfrlist thenargs))
-                    (interp-st-bfr-listp (fgl-objectlist-bfrlist elseargs)))
+                    (fgl-objectlist-bfrs-ok thenargs (interp-st-bfrstate))
+                    (fgl-objectlist-bfrs-ok elseargs (interp-st-bfrstate)))
         :measure (list (nfix (interp-st->reclimit interp-st))
                        3000 (len thenargs) 0)
         :returns (mv
@@ -6683,11 +6683,11 @@
     :evisc (:gag-mode (evisc-tuple 8 10 nil nil) :term nil)
     (std::defret-mutual-generate <fn>-preserves-pathcond
       :formal-hyps (((interp-st-bfr-p x)           (interp-st-bfr-p x))
-                    ((fgl-object-p x)               (interp-st-bfr-listp (fgl-object-bfrlist x)))
-                    ((fgl-objectlist-p x)           (interp-st-bfr-listp (fgl-objectlist-bfrlist x)))
-                    ((fgl-object-bindings-p x)      (interp-st-bfr-listp (fgl-object-bindings-bfrlist x)))
+                    ((fgl-object-p x)              (fgl-object-bfrs-ok x (interp-st-bfrstate)))
+                    ((fgl-objectlist-p x)          (fgl-objectlist-bfrs-ok x (interp-st-bfrstate)))
+                    ((fgl-object-bindings-p x)     (fgl-object-bindings-bfrs-ok x (interp-st-bfrstate)))
                     (interp-st                     (interp-st-bfrs-ok interp-st))
-                    ((constraint-instancelist-p x) (interp-st-bfr-listp (constraint-instancelist-bfrlist x))))
+                    ((constraint-instancelist-p x) (constraint-instancelist-bfrs-ok x (interp-st-bfrstate))))
       :rules ((t (:add-concl ;;(implies (not (fgl-interp-real-errorp err))
                   (equal (logicman-pathcond-eval-checkpoints!
                           env
@@ -6770,11 +6770,11 @@
     :evisc (:gag-mode (evisc-tuple 8 10 nil nil) :term nil)
     (std::defret-mutual-generate <fn>-preserves-pathcond-eval
       :formal-hyps (((interp-st-bfr-p x)           (interp-st-bfr-p x))
-                    ((fgl-object-p x)               (interp-st-bfr-listp (fgl-object-bfrlist x)))
-                    ((fgl-objectlist-p x)           (interp-st-bfr-listp (fgl-objectlist-bfrlist x)))
-                    ((fgl-object-bindings-p x)      (interp-st-bfr-listp (fgl-object-bindings-bfrlist x)))
+                    ((fgl-object-p x)               (fgl-object-bfrs-ok x (interp-st-bfrstate)))
+                    ((fgl-objectlist-p x)           (fgl-objectlist-bfrs-ok x (interp-st-bfrstate)))
+                    ((fgl-object-bindings-p x)      (fgl-object-bindings-bfrs-ok x (interp-st-bfrstate)))
                     (interp-st                     (interp-st-bfrs-ok interp-st))
-                    ((constraint-instancelist-p x) (interp-st-bfr-listp (constraint-instancelist-bfrlist x))))
+                    ((constraint-instancelist-p x) (constraint-instancelist-bfrs-ok x (interp-st-bfrstate))))
       :rules ((t (:add-concl ;;(implies (not (fgl-interp-real-errorp err))
                   (equal (logicman-pathcond-eval
                           env
@@ -6837,11 +6837,11 @@
     :evisc (:gag-mode (evisc-tuple 8 10 nil nil) :term nil)
     (std::defret-mutual-generate <fn>-constraint-eval-tightens
       :formal-hyps (((interp-st-bfr-p x)           (interp-st-bfr-p x))
-                    ((fgl-object-p x)               (interp-st-bfr-listp (fgl-object-bfrlist x)))
-                    ((fgl-objectlist-p x)           (interp-st-bfr-listp (fgl-objectlist-bfrlist x)))
-                    ((fgl-object-bindings-p x)      (interp-st-bfr-listp (fgl-object-bindings-bfrlist x)))
+                    ((fgl-object-p x)               (fgl-object-bfrs-ok x (interp-st-bfrstate)))
+                    ((fgl-objectlist-p x)           (fgl-objectlist-bfrs-ok x (interp-st-bfrstate)))
+                    ((fgl-object-bindings-p x)      (fgl-object-bindings-bfrs-ok x (interp-st-bfrstate)))
                     (interp-st                     (interp-st-bfrs-ok interp-st))
-                    ((constraint-instancelist-p x) (interp-st-bfr-listp (constraint-instancelist-bfrlist x))))
+                    ((constraint-instancelist-p x) (constraint-instancelist-bfrs-ok x (interp-st-bfrstate))))
       :rules ((t (:add-concl ;;(implies (not (fgl-interp-real-errorp err))
                   (implies (not (logicman-pathcond-eval
                                  env
@@ -6884,11 +6884,11 @@
     :evisc (:gag-mode (evisc-tuple 8 10 nil nil) :term nil)
     (std::defret-mutual-generate <fn>-constraint-eval-tightens-rw
       :formal-hyps (((interp-st-bfr-p x)           (interp-st-bfr-p x))
-                    ((fgl-object-p x)               (interp-st-bfr-listp (fgl-object-bfrlist x)))
-                    ((fgl-objectlist-p x)           (interp-st-bfr-listp (fgl-objectlist-bfrlist x)))
-                    ((fgl-object-bindings-p x)      (interp-st-bfr-listp (fgl-object-bindings-bfrlist x)))
+                    ((fgl-object-p x)               (fgl-object-bfrs-ok x (interp-st-bfrstate)))
+                    ((fgl-objectlist-p x)           (fgl-objectlist-bfrs-ok x (interp-st-bfrstate)))
+                    ((fgl-object-bindings-p x)      (fgl-object-bindings-bfrs-ok x (interp-st-bfrstate)))
                     (interp-st                     (interp-st-bfrs-ok interp-st))
-                    ((constraint-instancelist-p x) (interp-st-bfr-listp (constraint-instancelist-bfrlist x))))
+                    ((constraint-instancelist-p x) (constraint-instancelist-bfrs-ok x (interp-st-bfrstate))))
       :rules ((t (:add-concl ;;(implies (not (fgl-interp-real-errorp err))
                   (let ((eval (logicman-pathcond-eval
                                  env
@@ -7063,11 +7063,11 @@
     :evisc (:gag-mode (evisc-tuple 8 10 nil nil) :term nil)
     (std::defret-mutual-generate <fn>-stack-equiv-except-top-bindings
       :formal-hyps (((interp-st-bfr-p x)           (interp-st-bfr-p x))
-                    ((fgl-object-p x)               (interp-st-bfr-listp (fgl-object-bfrlist x)))
-                    ((fgl-objectlist-p x)           (interp-st-bfr-listp (fgl-objectlist-bfrlist x)))
-                    ((fgl-object-bindings-p x)      (interp-st-bfr-listp (fgl-object-bindings-bfrlist x)))
+                    ((fgl-object-p x)               (fgl-object-bfrs-ok x (interp-st-bfrstate)))
+                    ((fgl-objectlist-p x)           (fgl-objectlist-bfrs-ok x (interp-st-bfrstate)))
+                    ((fgl-object-bindings-p x)      (fgl-object-bindings-bfrs-ok x (interp-st-bfrstate)))
                     (interp-st                     (interp-st-bfrs-ok interp-st))
-                    ((constraint-instancelist-p x) (interp-st-bfr-listp (constraint-instancelist-bfrlist x))))
+                    ((constraint-instancelist-p x) (constraint-instancelist-bfrs-ok x (interp-st-bfrstate))))
       :rules ((t (:add-keyword :hints ('(:do-not-induct t)
                                        (let ((flag (find-flag-is-hyp clause)))
                                          (and flag
@@ -7152,11 +7152,11 @@
     :evisc (:gag-mode (evisc-tuple 8 10 nil nil) :term nil)
     (std::defret-mutual-generate <fn>-stack-bindings-has-key
       :formal-hyps (((interp-st-bfr-p x)           (interp-st-bfr-p x))
-                    ((fgl-object-p x)               (interp-st-bfr-listp (fgl-object-bfrlist x)))
-                    ((fgl-objectlist-p x)           (interp-st-bfr-listp (fgl-objectlist-bfrlist x)))
-                    ((fgl-object-bindings-p x)      (interp-st-bfr-listp (fgl-object-bindings-bfrlist x)))
+                    ((fgl-object-p x)               (fgl-object-bfrs-ok x (interp-st-bfrstate)))
+                    ((fgl-objectlist-p x)           (fgl-objectlist-bfrs-ok x (interp-st-bfrstate)))
+                    ((fgl-object-bindings-p x)      (fgl-object-bindings-bfrs-ok x (interp-st-bfrstate)))
                     (interp-st                     (interp-st-bfrs-ok interp-st))
-                    ((constraint-instancelist-p x) (interp-st-bfr-listp (constraint-instancelist-bfrlist x))))
+                    ((constraint-instancelist-p x) (constraint-instancelist-bfrs-ok x (interp-st-bfrstate))))
       :rules (((or (:fnname fgl-rewrite-binder-fncall)
                    (:fnname fgl-rewrite-binder-try-rules)
                    (:fnname fgl-rewrite-binder-try-rule)
@@ -7511,11 +7511,11 @@
     :evisc (:gag-mode (evisc-tuple 8 10 nil nil) :term nil)
     (std::defret-mutual-generate <fn>-stack-bindings-extended
       :formal-hyps (((interp-st-bfr-p x)           (interp-st-bfr-p x))
-                    ((fgl-object-p x)               (interp-st-bfr-listp (fgl-object-bfrlist x)))
-                    ((fgl-objectlist-p x)           (interp-st-bfr-listp (fgl-objectlist-bfrlist x)))
-                    ((fgl-object-bindings-p x)      (interp-st-bfr-listp (fgl-object-bindings-bfrlist x)))
+                    ((fgl-object-p x)               (fgl-object-bfrs-ok x (interp-st-bfrstate)))
+                    ((fgl-objectlist-p x)           (fgl-objectlist-bfrs-ok x (interp-st-bfrstate)))
+                    ((fgl-object-bindings-p x)      (fgl-object-bindings-bfrs-ok x (interp-st-bfrstate)))
                     (interp-st                     (interp-st-bfrs-ok interp-st))
-                    ((constraint-instancelist-p x) (interp-st-bfr-listp (constraint-instancelist-bfrlist x))))
+                    ((constraint-instancelist-p x) (constraint-instancelist-bfrs-ok x (interp-st-bfrstate))))
       :rules (((and (not (:fnname fgl-rewrite-binder-fncall))
                     (not (:fnname fgl-rewrite-binder-try-rules))
                     (not (:fnname fgl-rewrite-binder-try-rule))
@@ -7564,11 +7564,11 @@
     :evisc (:gag-mode (evisc-tuple 8 10 nil nil) :term nil)
     (std::defret-mutual-generate <fn>-stack-bindings-extended-rw
       :formal-hyps (((interp-st-bfr-p x)           (interp-st-bfr-p x))
-                    ((fgl-object-p x)               (interp-st-bfr-listp (fgl-object-bfrlist x)))
-                    ((fgl-objectlist-p x)           (interp-st-bfr-listp (fgl-objectlist-bfrlist x)))
-                    ((fgl-object-bindings-p x)      (interp-st-bfr-listp (fgl-object-bindings-bfrlist x)))
+                    ((fgl-object-p x)               (fgl-object-bfrs-ok x (interp-st-bfrstate)))
+                    ((fgl-objectlist-p x)           (fgl-objectlist-bfrs-ok x (interp-st-bfrstate)))
+                    ((fgl-object-bindings-p x)      (fgl-object-bindings-bfrs-ok x (interp-st-bfrstate)))
                     (interp-st                     (interp-st-bfrs-ok interp-st))
-                    ((constraint-instancelist-p x) (interp-st-bfr-listp (constraint-instancelist-bfrlist x))))
+                    ((constraint-instancelist-p x) (constraint-instancelist-bfrs-ok x (interp-st-bfrstate))))
       :rules ((t (:add-concl (implies (and (equal (stack$a-bindings old-stack-ev)
                                                   (stack$a-bindings (fgl-major-stack-concretize
                                                                      (interp-st->stack interp-st)
@@ -8191,7 +8191,7 @@
                     (fgl-formula-checks-stub st)
                     (equal (w st) (w state))
                     (interp-st-bfrs-ok interp-st)
-                    (interp-st-bfr-listp (fgl-objectlist-bfrlist args))
+                    (fgl-objectlist-bfrs-ok args (interp-st-bfrstate))
                     (logicman-pathcond-eval (fgl-env->bfr-vals env)
                                             (interp-st->constraint interp-st)
                                             (interp-st->logicman interp-st))
@@ -8247,7 +8247,7 @@
         (fgl-formula-checks-stub st)
         (equal (w st) (w state))
         (interp-st-bfrs-ok interp-st)
-        (interp-st-bfr-listp (fgl-objectlist-bfrlist args))
+        (fgl-objectlist-bfrs-ok args (interp-st-bfrstate))
         (logicman-pathcond-eval (fgl-env->bfr-vals env)
                                 (interp-st->constraint interp-st)
                                 (interp-st->logicman interp-st))
@@ -9562,11 +9562,11 @@
      (std::defret-mutual-generate <fn>-bvar-db-ok-doesnt-get-fixed-somehow
 
        :formal-hyps (((interp-st-bfr-p x)           (interp-st-bfr-p x))
-                     ((fgl-object-p x)               (interp-st-bfr-listp (fgl-object-bfrlist x)))
-                     ((fgl-objectlist-p x)           (interp-st-bfr-listp (fgl-objectlist-bfrlist x)))
-                    ((fgl-object-bindings-p x)      (interp-st-bfr-listp (fgl-object-bindings-bfrlist x)))
+                     ((fgl-object-p x)               (fgl-object-bfrs-ok x (interp-st-bfrstate)))
+                     ((fgl-objectlist-p x)           (fgl-objectlist-bfrs-ok x (interp-st-bfrstate)))
+                    ((fgl-object-bindings-p x)      (fgl-object-bindings-bfrs-ok x (interp-st-bfrstate)))
                      (interp-st                     (interp-st-bfrs-ok interp-st))
-                     ((constraint-instancelist-p x) (interp-st-bfr-listp (constraint-instancelist-bfrlist x))))
+                     ((constraint-instancelist-p x) (constraint-instancelist-bfrs-ok x (interp-st-bfrstate))))
 
        :rules ((t (:add-concl (implies (not (interp-st-bvar-db-ok interp-st env))
                                        (not (interp-st-bvar-db-ok new-interp-st env))))
@@ -9602,11 +9602,11 @@
     (std::defret-mutual-generate <fn>-bvar-db-ok-implies-previous-ok
 
       :formal-hyps (((interp-st-bfr-p x)           (interp-st-bfr-p x))
-                    ((fgl-object-p x)               (interp-st-bfr-listp (fgl-object-bfrlist x)))
-                    ((fgl-objectlist-p x)           (interp-st-bfr-listp (fgl-objectlist-bfrlist x)))
-                    ((fgl-object-bindings-p x)      (interp-st-bfr-listp (fgl-object-bindings-bfrlist x)))
+                    ((fgl-object-p x)               (fgl-object-bfrs-ok x (interp-st-bfrstate)))
+                    ((fgl-objectlist-p x)           (fgl-objectlist-bfrs-ok x (interp-st-bfrstate)))
+                    ((fgl-object-bindings-p x)      (fgl-object-bindings-bfrs-ok x (interp-st-bfrstate)))
                     (interp-st                     (interp-st-bfrs-ok interp-st))
-                    ((constraint-instancelist-p x) (interp-st-bfr-listp (constraint-instancelist-bfrlist x))))
+                    ((constraint-instancelist-p x) (constraint-instancelist-bfrs-ok x (interp-st-bfrstate))))
 
       :rules ((t (:add-concl (iff* (interp-st-bvar-db-ok new-interp-st env)
                                    (and* (interp-st-bvar-db-ok* new-interp-st env)
@@ -10996,11 +10996,11 @@
    (defconst *fgl-interp-correct-body*
      '(std::defret-generate <fn>-correct
         :formal-hyps (((interp-st-bfr-p x)           (interp-st-bfr-p x))
-                      ((fgl-object-p x)               (interp-st-bfr-listp (fgl-object-bfrlist x)))
-                      ((fgl-objectlist-p x)           (interp-st-bfr-listp (fgl-objectlist-bfrlist x)))
-                    ((fgl-object-bindings-p x)      (interp-st-bfr-listp (fgl-object-bindings-bfrlist x)))
+                      ((fgl-object-p x)               (fgl-object-bfrs-ok x (interp-st-bfrstate)))
+                      ((fgl-objectlist-p x)           (fgl-objectlist-bfrs-ok x (interp-st-bfrstate)))
+                      ((fgl-object-bindings-p x)      (fgl-object-bindings-bfrs-ok x (interp-st-bfrstate)))
                       (interp-st                     (interp-st-bfrs-ok interp-st))
-                      ((constraint-instancelist-p x) (interp-st-bfr-listp (constraint-instancelist-bfrlist x)))
+                      ((constraint-instancelist-p x) (constraint-instancelist-bfrs-ok x (interp-st-bfrstate)))
                       (state                         (and (fgl-ev-meta-extract-global-facts :state st)
                                                           (equal (w st) (w state))
                                                           (fgl-formula-checks-stub st)
