@@ -990,6 +990,176 @@
                (pseudo-term-lambda full-formals rest-body full-actuals))))
 
 
+
+
+(define prune-bindings ((free-vars pseudo-var-list-p)
+                        (formals pseudo-var-list-p)
+                        (args pseudo-term-listp))
+  :guard (equal (len formals) (len args))
+  :returns (mv (new-formals pseudo-var-list-p)
+               (new-args pseudo-term-listp))
+  (if (atom formals)
+      (mv nil nil)
+    (b* ((formal (pseudo-var-fix (car formals))))
+      (if (member-eq formal (pseudo-var-list-fix free-vars))
+          (b* (((mv rest-formals rest-args)
+                (prune-bindings free-vars (cdr formals) (cdr args))))
+            (mv (cons formal rest-formals)
+                (cons (pseudo-term-fix (car args)) rest-args)))
+        (prune-bindings free-vars (cdr formals) (cdr args)))))
+  ///
+  (defret len-of-prune-bindings
+    (equal (len new-args)
+           (len new-formals)))
+
+  (defret lookup-of-<fn>
+    (equal (hons-assoc-equal k (pairlis$ new-formals new-args))
+           (and (member-equal k (pseudo-var-list-fix free-vars))
+                (hons-assoc-equal k (pairlis$ (pseudo-var-list-fix formals)
+                                              (pseudo-term-list-fix args))))))
+  
+  (defret eval-alists-agree-of-<fn>
+    (implies (equal free-vars1 (pseudo-var-list-fix free-vars))
+             (eval-alists-agree free-vars1
+                                (pairlis$ new-formals new-args)
+                                (pairlis$ (pseudo-var-list-fix formals)
+                                          (pseudo-term-list-fix args))))
+    :hints(("Goal" :in-theory (enable eval-alists-agree-by-bad-guy)
+            :do-not-induct t))))
+
+(local (set-induction-depth-limit 1))
+(define bindinglist-to-lambda-nest-prune-aux ((x bindinglist-p)
+                                        (body pseudo-termp))
+  :returns (mv (term pseudo-termp)
+               (free-vars pseudo-var-list-p))
+  :verify-guards nil
+  (b* (((when (atom x)) (mv (pseudo-term-fix body) (term-vars body)))
+       ((mv rest-body free-vars)
+        (bindinglist-to-lambda-nest-prune-aux (cdr x) body))
+       ((binding x1) (car x))
+       (missing-vars (set-difference-eq free-vars x1.formals))
+       ((mv pruned-formals pruned-actuals)
+        (prune-bindings free-vars x1.formals x1.args))
+       (full-formals (append missing-vars pruned-formals))
+       (full-actuals (append missing-vars pruned-actuals))
+       (new-free-vars (union-eq (termlist-vars pruned-actuals)
+                                missing-vars)))
+    (mv (pseudo-term-lambda full-formals rest-body full-actuals)
+        new-free-vars))
+  ///
+  (local (defthm termlist-vars-of-append
+           (set-equiv (termlist-vars (append x y))
+                      (append (termlist-vars x) (termlist-vars y)))
+           :hints(("Goal" :in-theory (enable termlist-vars)))))
+
+  (local (defthm term-vars-of-pseudo-var
+           (implies (pseudo-var-p x)
+                    (equal (term-vars x) (list x)))
+           :hints(("Goal" :expand ((term-vars x))
+                   :in-theory (enable pseudo-var-p pseudo-term-kind pseudo-term-var->name)))))
+
+  (local (defthm termlist-vars-of-pseudo-var-list
+           (implies (pseudo-var-list-p x)
+                    (set-equiv (termlist-vars x) x))
+           :hints(("Goal" :induct (len x)
+                   :expand ((termlist-vars x))))))
+
+  (local (defthm pseudo-var-list-p-of-set-difference
+           (implies (pseudo-var-list-p x)
+                    (pseudo-var-list-p (set-difference-equal x y)))))
+
+  (local (defthm termlist-vars-of-true-list-fix
+           (equal (termlist-vars (true-list-fix x))
+                  (termlist-vars x))
+           :hints(("Goal" :induct (len x)
+                   :expand ((termlist-vars x)
+                            (true-list-fix x)
+                            (:free (a b) (termlist-vars (cons a b))))))))
+
+  (defcong set-equiv set-equiv (append x y) 1)
+  
+  (defret <fn>-free-vars-correct
+    (set-equiv free-vars (term-vars term))
+    :hints (("goal" :induct <call>
+             :expand (<call>
+                      (:free (formals body args)
+                       (term-vars (pseudo-term-lambda formals body args)))))))
+
+  (local (defthm pairlis$-append
+           (implies (equal (len a1) (len a2))
+                    (equal (pairlis$ (Append a1 b1) (append a2 b2))
+                           (append (pairlis$ a1 a2) (pairlis$ b1 b2))))
+           :hints(("Goal" :in-theory (enable pairlis$)))))
+
+  (local (defthm pairlis$-of-base-ev-list
+           (implies (pseudo-var-list-p keys)
+                    (equal (pairlis$ keys (base-ev-list vals a))
+                           (base-ev-alist (pairlis$ keys vals) a)))
+           :hints(("Goal" :in-theory (enable base-ev-alist pairlis$)))))
+
+
+  (local (defthm hons-assoc-equal-of-base-ev-alist
+           (equal (hons-assoc-equal k (base-ev-alist x a))
+                  (and (pseudo-var-p k)
+                       (hons-assoc-equal k x)
+                       (cons k (base-ev (cdr (hons-assoc-equal k x)) a))))
+           :hints(("Goal" :in-theory (enable base-ev-alist)
+                   :induct (base-ev-alist x a)))))
+
+  (local (defthm hons-assoc-equal-of-pair-self
+           (equal (hons-assoc-equal k (pairlis$ x x))
+                  (and (member-equal k x)
+                       (cons k k)))
+           :hints(("Goal" :in-theory (enable pairlis$)))))
+  
+  (defret <fn>-correct
+    (equal (base-ev term a)
+           (base-ev body (base-ev-bindinglist x a)))
+    :hints (("goal" :induct (base-ev-bindinglist x a)
+             :in-theory (e/d (base-ev-bindinglist
+                                eval-alists-agree-by-bad-guy)
+                             (base-ev-when-agree-on-term-vars)))
+            (acl2::use-termhint
+             (b* (((binding x1) (car x))
+                  (formals x1.formals)
+                  (actuals x1.args)
+                  ((mv rest-body free-vars) (bindinglist-to-lambda-nest-prune-aux (cdr x) body))
+                  (missing-vars (set-difference-eq free-vars formals))
+                  ((mv pruned-formals pruned-actuals)
+                   (prune-bindings free-vars x1.formals x1.args))
+                  (full-formals (append missing-vars pruned-formals))
+                  (full-actuals (append missing-vars pruned-actuals))
+                  (impl-alist (pairlis$ full-formals (base-ev-list full-actuals a)))
+                  (spec-alist (append (pairlis$ formals (base-ev-list actuals a)) a)))
+               `'(:use ((:instance base-ev-when-agree-on-term-vars
+                         (x ,(hq rest-body))
+                         (a ,(hq impl-alist))
+                         (b  ,(hq spec-alist)))))))))
+
+  (verify-guards bindinglist-to-lambda-nest-prune-aux))
+
+(define bindinglist-to-lambda-nest-prune ((x bindinglist-p)
+                                         (body pseudo-termp))
+  :guard-hints (("goal" :expand ((bindinglist-to-lambda-nest-prune-aux x body)) ))
+  :returns (term pseudo-termp)
+  (mbe :logic (b* (((mv res &) (bindinglist-to-lambda-nest-prune-aux x body)))
+                res)
+       :exec (b* (((when (atom x)) (pseudo-term-fix body))
+                  ((mv rest-body free-vars)
+                   (bindinglist-to-lambda-nest-prune-aux (cdr x) body))
+                  ((binding x1) (car x))
+                  (missing-vars (set-difference-eq free-vars x1.formals))
+                  ((mv pruned-formals pruned-actuals)
+                   (prune-bindings free-vars x1.formals x1.args))
+                  (full-formals (append missing-vars pruned-formals))
+                  (full-actuals (append missing-vars pruned-actuals)))
+               (pseudo-term-lambda full-formals rest-body full-actuals)))
+  ///
+  (defret <fn>-correct
+    (equal (base-ev term a)
+           (base-ev body (base-ev-bindinglist x a)))))
+
+
 (defun translate-cmp-ignore-ok (x stobjs-out logic-modep known-stobjs ctx w state-vars)
   (declare (xargs :mode :program))
   ;; We override ignore-ok so that we can translate a list of B* binders
