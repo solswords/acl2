@@ -1367,6 +1367,24 @@ shifts instead of right shifts.</p>"
                  :in-theory (enable (:t logbitp) (:t bit->bool)))))
   :otf-flg t)
 
+(def-svmask arraysel (index width in)
+  :body (if (4vmask-empty mask)
+             (list 0 0 0)
+           (list -1 -1 -1))
+  :hints (("Goal" :in-theory (e/d (svex-apply
+                                    4veclist-nth-safe
+                                    4vec-array-select)
+                                   (hide-past-third-arg)))))
+
+(def-svmask arrayinst (index width in val)
+  :body (if (4vmask-empty mask)
+             (list 0 0 0 0)
+           (list -1 -1 -1 -1))
+  :hints (("Goal" :in-theory (e/d (svex-apply
+                                    4veclist-nth-safe
+                                    4vec-array-install)
+                                   (hide-past-third-arg)))))
+
 
 
 (def-svmask bitand (x y)

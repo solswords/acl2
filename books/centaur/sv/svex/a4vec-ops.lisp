@@ -3042,6 +3042,26 @@ optimization to avoid problems due to large masks.</p>"
            (and stable-under-simplificationp
                 '(:in-theory (enable 4vec-mask))))))
 
+(define a4vec-array-select ((index a4vec-p)
+                             (width a4vec-p)
+                             (in a4vec-p)
+                             (mask 4vmask-p))
+  :short "Symbolic version of @(see 4vec-array-select)."
+  :returns (res a4vec-p)
+  (a4vec-part-select (a4vec-times index width) width in mask)
+  ///
+  (defthm a4vec-array-select-correct
+    (4vec-mask-equiv (a4vec-eval (a4vec-array-select index width in mask) env)
+                     (4vec-array-select (a4vec-eval index env)
+                                        (a4vec-eval width env)
+                                        (a4vec-eval in env))
+                     mask)
+    :hints (("Goal"
+             :use ((:instance a4vec-part-select-correct
+                    (lsb (a4vec-times index width))))
+             :in-theory (e/d (4vec-array-select)
+                             (a4vec-part-select-correct))))))
+
 
 (define aig-overlap-width-ss-aux ((rev-pos true-listp)
                                   (pos-len (equal pos-len (len rev-pos)))
@@ -3673,6 +3693,28 @@ creating enormous vectors when given a huge shift amount.</p>"
                    :in-theory (enable 4vec-part-install)))
             (and stable-under-simplificationp
                  '(:in-theory (enable  4vec-zero-ext 4vec-rsh 4vec-shift-core 4vec-concat 4vec-mask))))))
+
+(define a4vec-array-install ((index a4vec-p)
+                              (width a4vec-p)
+                              (in a4vec-p)
+                              (val a4vec-p)
+                              (mask 4vmask-p))
+  :short "Symbolic version of @(see 4vec-array-install)."
+  :returns (res a4vec-p)
+  (a4vec-part-install (a4vec-times index width) width in val mask)
+  ///
+  (defthm a4vec-array-install-correct
+    (4vec-mask-equiv (a4vec-eval (a4vec-array-install index width in val mask) env)
+                     (4vec-array-install (a4vec-eval index env)
+                                         (a4vec-eval width env)
+                                         (a4vec-eval in env)
+                                         (a4vec-eval val env))
+                     mask)
+    :hints (("Goal"
+             :use ((:instance a4vec-part-install-correct
+                    (lsb (a4vec-times index width))))
+             :in-theory (e/d (4vec-array-install)
+                             (a4vec-part-install-correct))))))
 
 
                                                                  

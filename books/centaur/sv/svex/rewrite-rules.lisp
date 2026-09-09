@@ -420,6 +420,9 @@
             (3valued-syntaxp (third x.args))))
       ((partinst)
        (and (3valued-syntaxp (third x.args))
+            (3valued-syntaxp (fourth x.args))))
+      ((arrayinst)
+       (and (3valued-syntaxp (third x.args))
             (3valued-syntaxp (fourth x.args))))))
 
   (defconst *3valued-syntaxp-nonmemo-cases*
@@ -458,6 +461,8 @@
         lsh)
        (3valued-syntaxp (second x.args)))
       ((partsel)
+       (3valued-syntaxp (third x.args)))
+      ((arraysel)
        (3valued-syntaxp (third x.args)))
       ((blkrev)
        (3valued-syntaxp (third x.args)))))
@@ -761,6 +766,17 @@
                       (3vec-p val))
                  (3vec-p (4vec-part-install lsb width in val)))
         :hints(("Goal" :in-theory (enable 4vec-part-install))))
+
+      (defthm 3vec-p-of-4vec-array-select
+        (implies (3vec-p in)
+                 (3vec-p (4vec-array-select index width in)))
+        :hints(("Goal" :in-theory (enable 4vec-array-select))))
+
+      (defthm 3vec-p-of-4vec-array-install
+        (implies (and (3vec-p in)
+                      (3vec-p val))
+                 (3vec-p (4vec-array-install index width in val)))
+        :hints(("Goal" :in-theory (enable 4vec-array-install))))
 
 
 
