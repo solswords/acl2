@@ -973,9 +973,10 @@ ignored.</p>"
                (slot-index (implies (not err) (sv::svex-p slot-index))))
   (b* (((mv err ?size msb lsb) (vl-datatype-slot-width/range x))
        ((when err) (mv err nil)))
-    (mv nil (if (>= msb lsb)
-                (sv::svcall sv::b- idx (svex-int lsb))
-              (sv::svcall sv::b- (svex-int lsb) idx))))
+    (mv nil (sv::svex-reduce-consts
+             (if (>= msb lsb)
+                 (sv::svcall sv::b- idx (svex-int lsb))
+               (sv::svcall sv::b- (svex-int lsb) idx)))))
   ///
   (defret vars-of-vl-datatype-index-slot-index
     (implies (and (not err)
