@@ -374,7 +374,149 @@
                        (and (or (not (and (consp pair)
                                           (pseudo-var-p (car pair))))
                                 (not (hons-assoc-equal (car pair) x)))
-                            (fgl-bindings-extension-p x y))))))
+                            (fgl-bindings-extension-p x y)))))
+
+          (Defthmd lookup-when-fgl-bindings-extension-p
+            (implies (and (fgl-bindings-extension-p x y)
+                          (fgl-object-bindings-p x)
+                          (hons-assoc-equal key (fgl-object-bindings-fix y)))
+                     (equal (hons-assoc-equal key x)
+                            (hons-assoc-equal key (fgl-object-bindings-fix y))))
+            :hints(("Goal" :in-theory (enable fgl-bindings-extension-p))))
+
+          (Defthmd lookup-when-fgl-bindings-extension-p-fix
+            (implies (and (fgl-bindings-extension-p x y)
+                          (hons-assoc-equal key (fgl-object-bindings-fix y)))
+                     (equal (hons-assoc-equal key (fgl-object-bindings-fix x))
+                            (hons-assoc-equal key (fgl-object-bindings-fix y))))
+            :hints(("Goal" :in-theory (enable fgl-bindings-extension-p))))
+
+          (local (in-theory (disable HONS-ASSOC-EQUAL-OF-FGL-OBJECT-BINDINGS-FIX)))
+          (cmr::defthm-term-vars-flag eval-under-fgl-bindings-extension-when-vars-bound
+            (defthm eval-under-fgl-bindings-extension-when-term-vars-bound
+              (implies (and (fgl-bindings-extension-p new old)
+                            (subsetp (term-vars x) (alist-keys (fgl-object-bindings-fix old))))
+                       (equal (fgl-ev x (fgl-object-bindings-eval new env))
+                              (fgl-ev x (fgl-object-bindings-eval old env))))
+              :hints ('(:expand ((term-vars x))
+                        :in-theory (enable lookup-when-fgl-bindings-extension-p
+                                           lookup-when-fgl-bindings-extension-p-fix
+                                           fgl-ev-when-pseudo-term-call)))
+              :flag term-vars)
+            (defthm eval-under-fgl-bindings-extension-when-termlist-vars-bound
+              (implies (and (fgl-bindings-extension-p new old)
+                            (subsetp (termlist-vars x) (alist-keys (fgl-object-bindings-fix old))))
+                       (equal (fgl-ev-list x (fgl-object-bindings-eval new env))
+                              (fgl-ev-list x (fgl-object-bindings-eval old env))))
+              :hints ('(:expand ((termlist-vars x))))
+              :flag termlist-vars))
+          (in-theory (disable eval-under-fgl-bindings-extension-when-termlist-vars-bound
+                              eval-under-fgl-bindings-extension-when-term-vars-bound)))
+        :endif)
+
+(ifndef "THMS_ONLY"
+        (fty::defflexsum fgl-arg
+          :parents (fgl)
+          :short "Type of FGL rewritten arguments"
+          :long "<p>This is a special type used during rewriting which is either a ragular FGL
+object, or else an unbound variable awaiting an assignment.</p>
+"
+          (:unbound
+           :short "FGL argument constructor for unbound variable objects."
+           :cond (and (consp x) (eq (car x) :unbound))
+           :fields ((var :acc-body (cdr x) :type pseudo-var-p))
+           :ctor-body (cons :unbound var))
+          (:obj
+           :short "FGL object constructor for symbolic Boolean objects."
+           :cond t
+           :fields ((obj :acc-body x :type fgl-object))
+           :ctor-body obj)
+
+          :post-pred-events
+          ((local (defthm car-unbound-when-fgl-object-p
+                    (implies (fgl-object-p x)
+                             (not (equal (car x) :unbound)))
+                    :hints (("goal" :expand ((fgl-object-p x)
+                                             (fgl-object-p (car x))))))))
+          ///
+          (defthmd fgl-object-p-when-not-unbound
+            (implies (and (fgl-arg-p x)
+                          (not (fgl-arg-case x :unbound)))
+                     (fgl-object-p x))
+            :hints(("Goal" :in-theory (enable fgl-arg-p
+                                              fgl-arg-kind))))
+          (defthm fgl-arg->obj-when-not-unbound
+            (implies ;;(and (fgl-arg-p x)
+             (not (fgl-arg-case x :unbound))
+             (equal (fgl-arg-obj->obj x) (fgl-object-fix x)))
+            :hints(("Goal" :in-theory (enable fgl-arg-p fgl-arg-kind
+                                              fgl-arg-obj->obj))))
+
+          (defthmd fgl-arg-fix-when-not-unbound
+            (implies ;;(and (fgl-arg-p x)
+             (not (fgl-arg-case x :unbound))
+             (equal (fgl-arg-fix x) (fgl-object-fix x)))
+            :hints(("Goal" :in-theory (enable fgl-arg-p fgl-arg-kind
+                                              fgl-arg-fix))))
+
+          (defthm fgl-arg-kind-not-unbound-of-fgl-object-fix
+            (implies (not (Fgl-arg-case x :unbound))
+                     (not (equal (fgl-arg-kind (fgl-object-fix x)) :unbound)))
+            :hints(("Goal" :in-theory (enable fgl-arg-kind)))))
+        
+        (fty::deflist fgl-arglist :elt-type fgl-arg :true-listp t)
+
+        (define fgl-arg-bfrlist ((x fgl-arg-p))
+          :returns (bfrlist true-listp :rule-classes :type-prescription)
+          (fgl-arg-case x
+            :unbound nil
+            :obj (fgl-object-bfrlist x.obj))
+          ///
+          (local (in-theory (enable fgl-arg-fix-when-not-unbound))))
+
+        (define fgl-arglist-bfrlist ((x fgl-arglist-p))
+          :returns (bfrlist true-listp :rule-classes :type-prescription)
+          (if (atom x)
+              nil
+            (append (fgl-arg-bfrlist (car x))
+                    (fgl-arglist-bfrlist (cdr x)))))
+        
+        (define fgl-arglist-all-boundp ((x fgl-arglist-p))
+          (if (atom x)
+              t
+            (and (fgl-arg-case (car x) :obj)
+                 (fgl-arglist-all-boundp (cdr x))))
+          ///
+          (defthmd fgl-objectlist-p-when-fgl-arglist-all-boundp
+            (implies (and (fgl-arglist-all-boundp x)
+                          (fgl-arglist-p x))
+                     (fgl-objectlist-p x))
+            :hints(("Goal" :in-theory (enable fgl-object-p-when-not-unbound))))
+
+          (defthmd fgl-arglist-fix-when-fgl-arglist-all-boundp
+            (implies ;;(and (fgl-arg-p x)
+             (fgl-arglist-all-boundp x)
+             (equal (fgl-arglist-fix x) (fgl-objectlist-fix x)))
+            :hints(("Goal" :in-theory (enable fgl-arglist-fix
+                                              fgl-objectlist-fix
+                                              fgl-arg-fix-when-not-unbound))))
+
+          (defthmd fgl-arglist-bfrlist-when-fgl-arglist-all-boundp
+            (implies (fgl-arglist-all-boundp x)
+                     (equal (fgl-arglist-bfrlist x)
+                            (fgl-objectlist-bfrlist x)))
+            :hints(("Goal" :in-theory (enable fgl-arglist-bfrlist
+                                              fgl-objectlist-bfrlist
+                                              fgl-arg-bfrlist)))))
+
+        (define fgl-arglist-holes ((x fgl-arglist-p))
+          :returns (holes boolean-listp)
+          (if (atom x)
+              nil
+            (let ((rest (fgl-arglist-holes (cdr x)))
+                  (first (fgl-arg-case (car x) :unbound)))
+              (and (or first rest)
+                   (cons first rest)))))
         :endif)
 
 
@@ -712,14 +854,45 @@
 
      (local (in-theory (enable bfr-listp-when-not-member-witness)))
 
-     (std::def-retgen-fnset fgl-unify-fnset (fgl-unify-concrete fgl-unify-term/gobj))
+     
+     (define fgl-unify-terms/arglist ((pat pseudo-term-listp)
+                                      (x fgl-arglist-p)
+                                      (alist fgl-object-bindings-p)
+                                      &optional ((bfrstate bfrstate-p) 'bfrstate))
+       :returns (mv flag (new-alist fgl-object-bindings-p))
+       :guard (bfr-listp (fgl-arglist-bfrlist x))
+       :guard-hints (("goal" :in-theory (enable fgl-object-p-when-not-unbound
+                                                fgl-arglist-bfrlist
+                                                fgl-arg-bfrlist)))
+       (cond ((atom pat) (if (atom x)
+                             (mv t (fgl-object-bindings-fix alist))
+                           (mv nil nil)))
+             ((atom x) (mv nil nil))
+             (t 
+              (b* ((x1 (car x)))
+                (fgl-arg-case x1
+                  :unbound (fgl-unify-terms/arglist (cdr pat) (cdr x) alist)
+                  :obj (b* (((mv ok alist) (fgl-unify-term/gobj (car pat) x1 alist))
+                            ((unless ok) (mv nil nil)))
+                         (fgl-unify-terms/arglist (cdr pat) (cdr x) alist))))))
+       ///
+       (fty::deffixequiv fgl-unify-terms/arglist
+         :hints (("goal" :induct (fgl-unify-terms/arglist pat x alist)
+                  :in-theory (enable fgl-arg-fix-when-not-unbound)
+                  :expand ((fgl-unify-terms/arglist (pseudo-term-fix pat) x alist)
+                           (:free (x alist) (fgl-unify-terms/arglist pat x alist))
+                           (fgl-arglist-fix x))))))
+
+     
+     (std::def-retgen-fnset fgl-unify-fnset (fgl-unify-concrete fgl-unify-term/gobj fgl-unify-terms/arglist))
 
      (std::defretgen bfr-listp-of-<fn>
        :formal-hyps
        (((fgl-object-bindings-p alist)    (bfr-listp (fgl-object-bindings-bfrlist alist)))
         ((fgl-object-p x)                 (bfr-listp (fgl-object-bfrlist x)))
         ((fgl-objectlist-p x)             (bfr-listp (fgl-objectlist-bfrlist x)))
-        ((fgl-object-alist-p x)           (bfr-listp (fgl-object-alist-bfrlist x))))
+        ((fgl-object-alist-p x)           (bfr-listp (fgl-object-alist-bfrlist x)))
+        ((fgl-arglist-p x)                (bfr-listp (fgl-arglist-bfrlist x))))
        :rules ((t (:add-concl (bfr-listp (fgl-object-bindings-bfrlist new-alist))))
                (:mutrec
                 (:add-keyword
@@ -727,8 +900,11 @@
                (:recursive
                 (:add-keyword
                  :hints (("goal" :induct <call>
-                          :in-theory (enable (:i <fn>))
-                          :expand ((:free (x) <call>)))))))
+                          :in-theory (enable (:i <fn>)
+                                             fgl-arg-bfrlist
+                                             fgl-arg-obj->obj-when-wrong-kind)
+                          :expand ((:free (x) <call>)
+                                   (fgl-arglist-bfrlist x)))))))
        :functions fgl-unify-fnset)
 
 
@@ -810,7 +986,8 @@
 
        (std::defretgen all-keys-bound-of-<fn>
          :rules
-         ((t (:add-hyp flag)
+         (((not (:fnname fgl-unify-terms/arglist))
+           (:add-hyp flag)
              (:each-formal :type pseudo-termp :var pat
               :action (:add-concl (subsetp (term-vars pat) (alist-keys new-alist))))
              (:each-formal :type pseudo-term-listp :var pat
@@ -1074,3 +1251,239 @@
                            nil))))))))
        :functions fgl-unify-fnset)
        :endif))))
+
+
+;; Masked matching is separate from the mutually recursive unifier.  Removing
+;; the hole positions lets the existing list unifier supply the rule bindings
+;; and its usual correctness/extension theorems for all known arguments.  The
+;; masked case is positional: a hole must receive the corresponding LHS arg.
+;; Callers with no holes should continue using fgl-unify-term/gobj-fn/args,
+;; including its EQUAL and IF matching special cases.
+(ifndef "THMS_ONLY"
+        
+        (define fgl-unify-terms-without-holes ((pat pseudo-term-listp)
+                                               (holes boolean-listp))
+          :returns (known-pat pseudo-term-listp)
+          :verify-guards nil
+          (if (atom pat)
+              nil
+            (mbe :logic
+                 (b* ((rest (fgl-unify-terms-without-holes (cdr pat) (cdr holes))))
+                   (if (car holes)
+                       rest
+                     (cons (pseudo-term-fix (car pat)) rest)))
+                 :exec (if (endp holes)
+                           pat
+                         (if (car holes)
+                             (fgl-unify-terms-without-holes (cdr pat) (cdr holes))
+                           (cons (car pat)
+                                 (fgl-unify-terms-without-holes (cdr pat) (cdr holes)))))))
+          ///
+          (defret <fn>-when-holes-empty
+            (implies (atom holes)
+                     (equal known-pat (pseudo-term-list-fix pat)))
+            :hints(("Goal" :in-theory (enable pseudo-term-list-fix))))
+          
+          (verify-guards fgl-unify-terms-without-holes))
+
+        (define fgl-unify-objects-without-holes ((x fgl-objectlist-p)
+                                                 (holes boolean-listp))
+          :returns (known-x fgl-objectlist-p)
+          :verify-guards nil
+          (if (atom x)
+              nil
+            (mbe :logic
+                 (b* ((rest (fgl-unify-objects-without-holes (cdr x) (cdr holes))))
+                   (if (car holes)
+                       rest
+                     (cons (fgl-object-fix (car x)) rest)))
+                 :exec (if (endp holes)
+                           x
+                         (if (car holes)
+                             (fgl-unify-objects-without-holes (cdr x) (cdr holes))
+                           (cons (car x)
+                                 (fgl-unify-objects-without-holes (cdr x) (cdr holes)))))))
+          ///
+          (defret <fn>-when-holes-empty
+            (implies (atom holes)
+                     (equal known-x (fgl-objectlist-fix x))))
+          
+          (verify-guards fgl-unify-objects-without-holes))
+
+        (define fgl-unify-term/gobj-fn/args-masked ((pat-fn pseudo-fnsym-p)
+                                                    (pat-args pseudo-term-listp)
+                                                    (x-fn pseudo-fnsym-p)
+                                                    (x-args fgl-arglist-p)
+                                                    (alist fgl-object-bindings-p)
+                                                    &optional ((bfrstate bfrstate-p) 'bfrstate))
+          :guard (bfr-listp (fgl-arglist-bfrlist x-args) bfrstate)
+          :returns (mv flag
+                       (new-alist fgl-object-bindings-p))
+          :verify-guards nil
+          (b* (((when (fgl-arglist-all-boundp x-args))
+                (fgl-unify-term/gobj-fn/args pat-fn pat-args x-fn x-args alist))
+               ((unless (and (eq (pseudo-fnsym-fix pat-fn)
+                                 (pseudo-fnsym-fix x-fn))
+                             ;; (equal (len pat-args) (len x-args))
+                             ))
+                (mv nil nil)))
+            (fgl-unify-terms/arglist pat-args x-args alist))
+          ///
+          (local (in-theory (enable fgl-arglist-fix-when-fgl-arglist-all-boundp
+                                    fgl-objectlist-p-when-fgl-arglist-all-boundp
+                                    fgl-arglist-bfrlist-when-fgl-arglist-all-boundp)))
+          (verify-guards fgl-unify-term/gobj-fn/args-masked-fn))
+
+        (define interleave-by-mask ((holes boolean-listp)
+                                    (hole-vals true-listp)
+                                    (nonhole-vals true-listp))
+          :measure (len nonhole-vals)
+          (if (atom nonhole-vals)
+              nil
+            (if (car holes)
+                (cons (car hole-vals)
+                      (interleave-by-mask (cdr holes) (cdr hole-vals) (cdr nonhole-vals)))
+              (cons (car nonhole-vals)
+                    (interleave-by-mask (cdr holes) (cdr hole-vals) (cdr nonhole-vals)))))
+          ///
+          (defthm interleave-by-mask-when-atom-holes
+            (implies (atom holes)
+                     (equal (interleave-by-mask holes hole-vals nonhole-vals)
+                            (acl2::true-list-fix nonhole-vals)))))
+        
+        :endif)
+
+
+(ifndef "DEFS_ONLY"
+        (defret bfr-listp-of-fgl-unify-objects-without-holes
+          (implies (bfr-listp (fgl-objectlist-bfrlist x) bfrstate)
+                   (bfr-listp (fgl-objectlist-bfrlist known-x) bfrstate))
+          :hints (("goal" :induct (fgl-unify-objects-without-holes x holes)
+                   :in-theory (enable fgl-unify-objects-without-holes
+                                      bfr-listp-when-not-member-witness)))
+          :fn fgl-unify-objects-without-holes)
+
+        (verify-guards fgl-unify-term/gobj-fn/args-masked-fn)
+
+        ;; Eventual property of masked unification:
+        ;; - For any extension of the unifying substitution, the evaluation of the pattern \ substitution equals
+        ;; the application of the function to the arguments formed by interleaving (according to the holes mask)
+        ;; the evaluations of the non-hole arguments with the evaluations of the pattern
+        ;;  arguments corresponding to hole arguments under the substitution.
+
+
+        (local (defthm fgl-unify-term/gobj-list-when-atom-pat
+                 (implies (atom pat)
+                          (equal (fgl-unify-term/gobj-list pat x alist)
+                                 (if (atom x)
+                                     (mv t (fgl-object-bindings-fix alist))
+                                   (mv nil nil))))
+                 :hints(("Goal" :expand ((fgl-unify-term/gobj-list pat x alist))))))
+
+        (local (defthm fgl-unify-term/gobj-list-when-atom-x
+                 (implies (atom x)
+                          (equal (fgl-unify-term/gobj-list pat x alist)
+                                 (if (atom pat)
+                                     (mv t (fgl-object-bindings-fix alist))
+                                   (mv nil nil))))
+                 :hints(("Goal" :expand ((fgl-unify-term/gobj-list pat x alist))))))
+
+        (define fgl-arglist-eval-with-unbound-vals ((x fgl-arglist-p) (unbound-vals true-listp)
+                                                    (env fgl-env-p)
+                                                    &optional (logicman 'logicman))
+          :returns (vals true-listp :rule-classes :type-prescription)
+          :guard (lbfr-listp (fgl-arglist-bfrlist x))
+          :guard-hints (("goal" :in-theory (enable fgl-arglist-bfrlist
+                                                   fgl-arg-bfrlist
+                                                   fgl-object-p-when-not-unbound)))
+          (if (atom x)
+              nil
+            (cons (b* ((x1 (car x)))
+                    (fgl-arg-case x1
+                      :obj (fgl-object-eval x1.obj env)
+                      :unbound (car unbound-vals)))
+                  (fgl-arglist-eval-with-unbound-vals (cdr x) (cdr unbound-vals) env)))
+          ///
+          (defret <fn>-when-all-boundp
+            (implies (fgl-arglist-all-boundp x)
+                     (equal vals (fgl-objectlist-eval x env)))
+            :hints(("Goal" :in-theory (enable fgl-objectlist-eval
+                                              fgl-arglist-all-boundp))))
+
+          (local (in-theory (enable fgl-arglist-fix
+                                    fgl-arg-fix-when-not-unbound))))
+                                              
+          
+        
+        (local (defun ind (pat-args x-args alist bfrstate)
+                 (declare (xargs :measure (len pat-args)))
+                 (if (or (atom pat-args)
+                         (atom x-args))
+                     (list x-args alist)
+                   (if (fgl-arg-case (car x-args) :unbound)
+                       (ind (cdr pat-args) (cdr x-args) alist bfrstate)
+                     (b* (((mv & new-alist) (fgl-unify-term/gobj (car pat-args) (car x-args) alist)))
+                       (ind (cdr pat-args) (cdr x-args) new-alist bfrstate))))))
+        
+        (local (defthm ev-of-pat-args-under-interleave-by-mask
+                 (b* (((mv flag new-alist)
+                       (fgl-unify-terms/arglist pat-args x-args alist)))
+                   (implies (and flag
+                                 ;; (equal (len pat-args) (len x-args))
+                                 (equal bfrstate (logicman->bfrstate))
+                                 (fgl-bindings-extension-p extended-alist new-alist))
+                            (equal (fgl-arglist-eval-with-unbound-vals
+                                    x-args
+                                    (fgl-ev-list pat-args (fgl-object-bindings-eval extended-alist env))
+                                    env)
+                                   (fgl-ev-list pat-args (fgl-object-bindings-eval extended-alist env)))))
+                 :hints (("goal" :induct (ind pat-args x-args alist (logicman->bfrstate))
+                          :in-theory (enable (:i interleave-by-mask)
+                                             eval-under-fgl-bindings-extension-when-termlist-vars-bound
+                                             eval-under-fgl-bindings-extension-when-term-vars-bound)
+                          :expand ((fgl-unify-terms/arglist pat-args x-args alist (logicman->bfrstate))
+                                   (:free (vals) (fgl-arglist-eval-with-unbound-vals x-args vals env)))))))
+        
+        (defretd fgl-unify-term/gobj-fn/args-masked-correct
+          (implies (and flag
+                        (equal bfrstate (logicman->bfrstate))
+                        (fgl-bindings-extension-p extended-alist new-alist))
+                   (let ((ev-alist (fgl-object-bindings-eval extended-alist env)))
+                     (equal (fgl-ev (pseudo-term-fncall pat-fn pat-args)
+                                    ev-alist)
+                            (fgl-ev (pseudo-term-fncall
+                                     x-fn
+                                     (kwote-lst
+                                      (fgl-arglist-eval-with-unbound-vals
+                                       x-args
+                                       (fgl-ev-list pat-args ev-alist)
+                                       env)))
+                                    nil))))
+          :hints (("goal" :in-theory (e/d (fgl-unify-term/gobj-fn/args-masked
+                                             eval-under-fgl-bindings-extension-when-termlist-vars-bound
+                                             eval-under-fgl-bindings-extension-when-term-vars-bound)
+                                          (FGL-EV-OF-PSEUDO-TERM-FNCALL
+                                           FGL-EV-WHEN-PSEUDO-TERM-FNCALL)
+                                          )
+                   :expand ((:free (fn args) (term-vars (pseudo-term-fncall fn args)))))
+                  (and stable-under-simplificationp
+                       '(:in-theory (enable fgl-ev-of-pseudo-term-fncall
+                                            fgl-ev-of-fncall-args))))
+          :fn fgl-unify-term/gobj-fn/args-masked)
+
+        (defret fgl-unify-term/gobj-fn/args-masked-extension
+          (implies flag
+                   (fgl-bindings-extension-p new-alist alist))
+          :hints (("goal" :in-theory (enable fgl-unify-term/gobj-fn/args-masked)))
+          :fn fgl-unify-term/gobj-fn/args-masked)
+
+        ;; (defret fgl-unify-term/gobj-fn/args-masked-known-vars-bound
+        ;;   (implies flag
+        ;;            (subsetp (termlist-vars
+        ;;                      (fgl-unify-terms-without-holes pat-args holes))
+        ;;                     (alist-keys new-alist)))
+        ;;   :hints (("goal" :in-theory (enable fgl-unify-term/gobj-fn/args-masked)))
+        ;;   :fn fgl-unify-term/gobj-fn/args-masked)
+        :endif)
+
+

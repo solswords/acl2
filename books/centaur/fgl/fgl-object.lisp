@@ -54,7 +54,10 @@
      :g-ite
      :g-apply
      :g-var
-     :g-map))
+     :g-map
+     ;; this isn't a keyword for actual FGL objects, but a special one used for
+     ;; unbound variables in an argument list.
+     :unbound))
 
 (fty::deftypes fgl-object
   (fty::defflexsum fgl-object
