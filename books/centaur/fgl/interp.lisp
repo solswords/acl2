@@ -164,14 +164,16 @@
 
 
 (define fncall-try-concrete-eval ((fn pseudo-fnsym-p)
-                                  (args fgl-objectlist-p)
+                                  (args fgl-arglist-p)
                                   (dont-concrete-exec)
                                   unequiv
                                   state)
   :returns (mv ok (ans fgl-object-p))
   (b* (((when (or dont-concrete-exec
-                  (not (g-concretelist-p args))))
+                  (not (fgl-arglist-all-boundp args))
+                  (not (g-concretelist-p (fgl-arglist->objects args)))))
         (mv nil nil))
+       (args (fgl-arglist->objects args))
        ((mv err ans)
         (if unequiv
             ;; allow attachments and program mode when unequiv
@@ -195,7 +197,9 @@
                   (equal (w st) (w state))
                   (not unequiv))
              (equal (fgl-object-eval ans env)
-                    (fgl-ev (cons (pseudo-fnsym-fix fn) (kwote-lst (fgl-objectlist-eval args env)))
+                    (fgl-ev (cons (pseudo-fnsym-fix fn) (kwote-lst (fgl-objectlist-eval
+                                                                    (fgl-arglist->objects args)
+                                                                    env)))
                             nil))))
 
   (defret fgl-ev-context-fix-of-eval-<fn>
@@ -207,7 +211,10 @@
              (equal (fgl-ev-context-fix contexts
                                         (fgl-object-eval ans env))
                     (fgl-ev-context-fix contexts
-                                        (fgl-ev (cons (pseudo-fnsym-fix fn) (kwote-lst (fgl-objectlist-eval args env)))
+                                        (fgl-ev (cons (pseudo-fnsym-fix fn)
+                                                      (kwote-lst (fgl-objectlist-eval
+                                                                  (fgl-arglist->objects args)
+                                                                  env)))
                                                 nil))))))
 
 
@@ -286,9 +293,9 @@
   :body `(b* (((mv ,@args interp-st state) . ,forms)) ,rest-expr))
 
 (define fgl-interp-syntax-interp ((synp-term pseudo-termp)
-                                 (untrans pseudo-termp)
-                                 (interp-st interp-st-bfrs-ok)
-                                 state)
+                                  (untrans pseudo-termp)
+                                  (interp-st interp-st-bfrs-ok)
+                                  state)
   :returns (mv (ans fgl-object-p)
                new-interp-st
                new-state)
@@ -299,24 +306,24 @@
   (b* (((unless (and (pseudo-term-case untrans :quote)))
         ;; We could go ahead and simulate x anyway but this does seem like an error.
         (fgl-interp-error :msg (fgl-msg "Bad syntax-interp form: args ~x0."
-                                      (list (pseudo-term-fix synp-term)
-                                            (pseudo-term-fix untrans)))))
+                                        (list (pseudo-term-fix synp-term)
+                                              (pseudo-term-fix untrans)))))
        ((unless (member-eq 'unequiv (interp-st->equiv-contexts interp-st)))
         (fgl-interp-error :msg (fgl-msg "Syntax-interp called not in an unequiv context: args ~x0."
-                                      (list (pseudo-term-fix synp-term)
-                                            (pseudo-term-fix untrans)))))
+                                        (list (pseudo-term-fix synp-term)
+                                              (pseudo-term-fix untrans)))))
        (bindings (append (interp-st-minor-bindings interp-st)
                          (interp-st-bindings interp-st)))
        ((mv err val interp-st state) (fancy-ev synp-term bindings 100 interp-st state t t))
        ((when err)
         (fgl-interp-error
          :msg (fgl-msg "Syntax-interp error evaluating ~x0: ~@1"
-                      (pseudo-term-quote->val untrans)
-                      (if (or (consp err) (stringp err)) err "(no message)"))))
+                       (pseudo-term-quote->val untrans)
+                       (if (or (consp err) (stringp err)) err "(no message)"))))
        ((unless (fgl-bfr-object-p val (interp-st-bfrstate)))
         (fgl-interp-error
          :msg (fgl-msg "Syntax-bind error: ~x0 evaluted to an illformed symbolic object, saved as debug object."
-                      (pseudo-term-quote->val untrans))
+                       (pseudo-term-quote->val untrans))
          :debug-obj val)))
     (fgl-interp-value val))
   ///
@@ -652,8 +659,8 @@
 
 
 
-                  
-    
+
+
 
 
 
@@ -733,11 +740,11 @@
 (local (in-theory (disable pseudo-termp acl2::magic-ev)))
 
 (define fgl-rewrite-relieve-hyp-synp ((synp-type symbolp)
-                                     (form pseudo-termp)
-                                     (vars)
-                                     (untrans-form)
-                                     (interp-st interp-st-bfrs-ok)
-                                     state)
+                                      (form pseudo-termp)
+                                      (vars)
+                                      (untrans-form)
+                                      (interp-st interp-st-bfrs-ok)
+                                      state)
   :returns (mv successp
                new-interp-st
                new-state)
@@ -767,7 +774,7 @@
        ((when err)
         (fgl-interp-error
          :msg (fgl-msg "Synp error evaluating ~x0 (translated: ~x1): ~x2"
-                      untrans-form form (if (or (consp err) (stringp err)) err "(no message)"))))
+                       untrans-form form (if (or (consp err) (stringp err)) err "(no message)"))))
        ((when (eq synp-type 'syntaxp))
         (fgl-interp-value val))
        ;; bind-free...
@@ -909,8 +916,8 @@
     (implies (and fn
                   (equal fn1 fn))
              (equal (fgl-ev (cons fn1
-                                         (kwote-lst (fgl-objectlist-eval args env)))
-                                   a)
+                                  (kwote-lst (fgl-objectlist-eval args env)))
+                            a)
                     (fgl-object-eval x env)))
     :hints(("Goal" :in-theory (enable fgl-apply fgl-objectlist-eval
                                       fgl-ev-of-fncall-args))))
@@ -1107,18 +1114,18 @@
         (b* ((test (bfr-fix test))
              ((mv car-ok car interp-st)
               (interp-st-object-basic-merge test
-                                     (gobj-syntactic-list->car then)
-                                     (gobj-syntactic-list->car else)
-                                     make-ites-p
-                                     interp-st))
+                                            (gobj-syntactic-list->car then)
+                                            (gobj-syntactic-list->car else)
+                                            make-ites-p
+                                            interp-st))
              ((unless car-ok)
               (mv nil nil interp-st))
              ((mv cdr-ok cdr interp-st)
               (interp-st-object-basic-merge test
-                                     (gobj-syntactic-list->cdr then)
-                                     (gobj-syntactic-list->cdr else)
-                                     make-ites-p
-                                     interp-st))
+                                            (gobj-syntactic-list->cdr then)
+                                            (gobj-syntactic-list->cdr else)
+                                            make-ites-p
+                                            interp-st))
              ((unless cdr-ok)
               (mv nil nil interp-st)))
           (mv t (mk-g-cons car cdr) interp-st))))
@@ -1221,7 +1228,7 @@
                   (logicman-pathcond-eval (fgl-env->bfr-vals env)
                                           (interp-st->constraint interp-st)
                                           (interp-st->logicman interp-st))
-                   (interp-st-bfrs-ok interp-st))
+                  (interp-st-bfrs-ok interp-st))
              (equal (fgl-object-eval obj env (interp-st->logicman new-interp-st))
                     (if (gobj-bfr-eval test env (interp-st->logicman interp-st))
                         (fgl-object-eval then env (interp-st->logicman interp-st))
@@ -1261,7 +1268,7 @@
     (iff* (nth *pathcond-enabledp* (interp-st->pathcond new-interp-st))
           (nth *pathcond-enabledp* (interp-st->pathcond interp-st)))
     :hints(("Goal" :expand (<call>) :induct <call>))))
-  
+
 
 ;; (define interp-st-fgl-object-basic-merge ((test interp-st-bfr-p)
 ;;                                          (then fgl-object-p)
@@ -1330,7 +1337,7 @@
 ;;   (defret interp-st->constraint-of-<fn>
 ;;     (pathcond-equiv (interp-st->constraint new-interp-st)
 ;;                     (interp-st->constraint interp-st)))
-  
+
 ;;   (defret <fn>-return-values-correct
 ;;     (equal (list . <values>)
 ;;            <call>))
@@ -1348,7 +1355,7 @@
 
 ;;   (defret w-state-of-<fn>
 ;;     (equal (w new-state) (w state)))
-  
+
 ;;   (defret pathcond-enabledp-of-<fn>
 ;;     (iff* (nth *pathcond-enabledp* (interp-st->pathcond new-interp-st))
 ;;           (nth *pathcond-enabledp* (interp-st->pathcond interp-st)))))
@@ -1359,12 +1366,12 @@
 
 
 (define fgl-interp-finish-simplify-if-test-ite ((test-bfr interp-st-bfr-p)
-                                               (then-bfr interp-st-bfr-p)
-                                               (else-bfr interp-st-bfr-p)
-                                               (then-unreachable)
-                                               (else-unreachable)
-                                               interp-st
-                                               state)
+                                                (then-bfr interp-st-bfr-p)
+                                                (else-bfr interp-st-bfr-p)
+                                                (then-unreachable)
+                                                (else-unreachable)
+                                                interp-st
+                                                state)
   :returns (mv (ite (interp-st-bfr-p ite new-interp-st))
                new-interp-st
                new-state)
@@ -1470,7 +1477,7 @@
             (< (+ (pseudo-term-binding-count (car x))
                   (pseudo-term-list-binding-count (cdr x)))
                (pseudo-term-list-binding-count x)))
-    :rule-classes :linear))
+   :rule-classes :linear))
 
 (local (defthm len-of-cons
          (equal (len (cons a b))
@@ -1532,7 +1539,7 @@
                            (stack$a-nth-scratch (1- n)
                                                 (stack$a-pop-scratch stack)))))
          :hints(("Goal" :in-theory (e/d (stack$a-top-scratch stack$a-pop-scratch stack$a-nth-scratch
-                                           stack$a-scratch-len len)
+                                                             stack$a-scratch-len len)
                                         ())
                  :expand ((major-stack-nth-scratch n stack)
                           (minor-stack-nth-scratch n (major-frame->minor-stack (car stack)))
@@ -1615,7 +1622,7 @@
 
 
 (define fgl-interp-equiv-refinementp ((equiv pseudo-fnsym-p)
-                                     (contexts equiv-contextsp))
+                                      (contexts equiv-contextsp))
   :hooks ((:fix :args (contexts)))
   (b* (;; (equiv (pseudo-fnsym-fix equiv))  BOZO we don't fix this because it messes up some stuff
        (contexts (equiv-contexts-fix contexts)))
@@ -1632,8 +1639,8 @@
                 (b* (((fgl-interp-value ans) ,term))
                   (fgl-interp-value t ans))
               (fgl-interp-error :msg (fgl-msg "Bad arity in special fncall: ~x0"
-                                             (cons (pseudo-fnsym-fix fn) (pseudo-term-list-fix args)))
-                               :nvals 2)))
+                                              (cons (pseudo-fnsym-fix fn) (pseudo-term-list-fix args)))
+                                :nvals 2)))
           (fgl-interp-fncall-special-case-fn (cdr cases)))))
 
 (defmacro fgl-interp-fncall-special-case (fn &rest cases)
@@ -1787,7 +1794,7 @@
              (bfr-listp (fgl-object-bfrlist ite)))))
 
 (define fgl-objectlist-split ((test fgl-object-p)
-                             (x fgl-objectlist-p))
+                              (x fgl-objectlist-p))
   :returns (mv (then fgl-objectlist-p)
                (else fgl-objectlist-p))
   (b* (((when (atom x)) (mv nil nil))
@@ -2176,185 +2183,185 @@
  (defsection bfr-listp-lemmas
 
    (defthm major-stack-bfrlist-of-atom
-      (implies (atom x)
-               (equal (major-stack-bfrlist x) nil))
-      :hints(("Goal" :in-theory (enable major-stack-bfrlist
-                                        default-car)))
-      :rule-classes ((:rewrite :backchain-limit-lst 0)))
+     (implies (atom x)
+              (equal (major-stack-bfrlist x) nil))
+     :hints(("Goal" :in-theory (enable major-stack-bfrlist
+                                       default-car)))
+     :rule-classes ((:rewrite :backchain-limit-lst 0)))
 
    (defthm major-stack-bfrlist-of-stack$a-push-scratch
-      (set-equiv (major-stack-bfrlist (stack$a-push-scratch obj stack))
-                 (append (scratchobj->bfrlist obj)
-                         (major-stack-bfrlist stack)))
-      :hints(("Goal" :in-theory (enable ;; major-stack-bfrlist
-                                 major-frame-bfrlist
-                                 ;; minor-stack-bfrlist
-                                 minor-frame-bfrlist
-                                 stack$a-push-scratch
-                                 ;; acl2::set-unequal-witness-rw
-                                 )
-              :expand ((major-stack-bfrlist stack)
-                       (minor-stack-bfrlist (major-frame->minor-stack (car stack))))
-              :do-not-induct t)))
+     (set-equiv (major-stack-bfrlist (stack$a-push-scratch obj stack))
+                (append (scratchobj->bfrlist obj)
+                        (major-stack-bfrlist stack)))
+     :hints(("Goal" :in-theory (enable ;; major-stack-bfrlist
+                                major-frame-bfrlist
+                                ;; minor-stack-bfrlist
+                                minor-frame-bfrlist
+                                stack$a-push-scratch
+                                ;; acl2::set-unequal-witness-rw
+                                )
+             :expand ((major-stack-bfrlist stack)
+                      (minor-stack-bfrlist (major-frame->minor-stack (car stack))))
+             :do-not-induct t)))
 
    (defthm scratchlist-bfrlist-of-update-nth
-      (implies (and (not (member v (scratchobj->bfrlist obj)))
-                    (not (member v (scratchlist-bfrlist x))))
-               (not (member v (scratchlist-bfrlist (update-nth n obj x)))))
-      :hints(("Goal" :in-theory (enable update-nth))))
+     (implies (and (not (member v (scratchobj->bfrlist obj)))
+                   (not (member v (scratchlist-bfrlist x))))
+              (not (member v (scratchlist-bfrlist (update-nth n obj x)))))
+     :hints(("Goal" :in-theory (enable update-nth))))
 
    (defthm bfrlist-of-stack$a-update-scratch
-      (implies (and (not (member v (scratchobj->bfrlist obj)))
-                    (not (member v (major-stack-bfrlist stack))))
-               (not (member v (major-stack-bfrlist (stack$a-update-scratch n obj stack)))))
-      :hints(("Goal" :in-theory (enable ;; major-stack-bfrlist
-                                 major-frame-bfrlist
-                                 ;; minor-stack-bfrlist
-                                 minor-frame-bfrlist
-                                 stack$a-update-scratch
-                                 ;; acl2::set-unequal-witness-rw
-                                 )
-              :expand ((major-stack-bfrlist stack)
-                       (minor-stack-bfrlist (major-frame->minor-stack (car stack))))
-              :do-not-induct t)))
+     (implies (and (not (member v (scratchobj->bfrlist obj)))
+                   (not (member v (major-stack-bfrlist stack))))
+              (not (member v (major-stack-bfrlist (stack$a-update-scratch n obj stack)))))
+     :hints(("Goal" :in-theory (enable ;; major-stack-bfrlist
+                                major-frame-bfrlist
+                                ;; minor-stack-bfrlist
+                                minor-frame-bfrlist
+                                stack$a-update-scratch
+                                ;; acl2::set-unequal-witness-rw
+                                )
+             :expand ((major-stack-bfrlist stack)
+                      (minor-stack-bfrlist (major-frame->minor-stack (car stack))))
+             :do-not-induct t)))
 
 
    (defthm fgl-objectlist-bfrlist-of-append
-            (equal (fgl-objectlist-bfrlist (append x y))
-                   (append (fgl-objectlist-bfrlist x)
-                           (fgl-objectlist-bfrlist y)))
-            :hints(("Goal" :in-theory (enable fgl-objectlist-bfrlist append))))
+     (equal (fgl-objectlist-bfrlist (append x y))
+            (append (fgl-objectlist-bfrlist x)
+                    (fgl-objectlist-bfrlist y)))
+     :hints(("Goal" :in-theory (enable fgl-objectlist-bfrlist append))))
 
    (defthm member-nthcdr
-            (implies (not (member v x))
-                     (not (member v (nthcdr n x)))))
+     (implies (not (member v x))
+              (not (member v (nthcdr n x)))))
 
 
 
    (defthm member-fgl-objectlist-bfrlist-of-nthcdr
-            (implies (not (member v (fgl-objectlist-bfrlist x)))
-                     (not (member v (fgl-objectlist-bfrlist (nthcdr n x)))))
-            :hints(("Goal" :in-theory (enable nthcdr))))
+     (implies (not (member v (fgl-objectlist-bfrlist x)))
+              (not (member v (fgl-objectlist-bfrlist (nthcdr n x)))))
+     :hints(("Goal" :in-theory (enable nthcdr))))
 
    (defthm major-stack-bfrlist-of-stack$a-pop-scratch
-      (implies (not (member v (major-stack-bfrlist stack)))
-               (not (member v (major-stack-bfrlist (stack$a-pop-scratch stack)))))
-      :hints(("Goal" :in-theory (enable stack$a-pop-scratch
-                                        major-stack-bfrlist
-                                        major-frame-bfrlist
-                                        minor-frame-bfrlist
-                                        minor-stack-bfrlist)
-              :expand ((major-stack-bfrlist stack)
-                       (minor-stack-bfrlist (major-frame->minor-stack (car stack))))
-              :do-not-induct t)))
+     (implies (not (member v (major-stack-bfrlist stack)))
+              (not (member v (major-stack-bfrlist (stack$a-pop-scratch stack)))))
+     :hints(("Goal" :in-theory (enable stack$a-pop-scratch
+                                       major-stack-bfrlist
+                                       major-frame-bfrlist
+                                       minor-frame-bfrlist
+                                       minor-stack-bfrlist)
+             :expand ((major-stack-bfrlist stack)
+                      (minor-stack-bfrlist (major-frame->minor-stack (car stack))))
+             :do-not-induct t)))
 
    (defthm major-stack-bfrlist-of-stack$a-set-bindings
-      (implies (and (not (member v (major-stack-bfrlist stack)))
-                    (not (member v (fgl-object-bindings-bfrlist bindings))))
-               (not (member v (major-stack-bfrlist (stack$a-set-bindings bindings stack)))))
-      :hints(("Goal" :in-theory (enable stack$a-set-bindings
-                                        major-stack-bfrlist
-                                        major-frame-bfrlist
-                                        minor-frame-bfrlist
-                                        minor-stack-bfrlist)
-              :do-not-induct t)))
+     (implies (and (not (member v (major-stack-bfrlist stack)))
+                   (not (member v (fgl-object-bindings-bfrlist bindings))))
+              (not (member v (major-stack-bfrlist (stack$a-set-bindings bindings stack)))))
+     :hints(("Goal" :in-theory (enable stack$a-set-bindings
+                                       major-stack-bfrlist
+                                       major-frame-bfrlist
+                                       minor-frame-bfrlist
+                                       minor-stack-bfrlist)
+             :do-not-induct t)))
 
    (defthm major-stack-bfrlist-of-stack$a-set-minor-bindings
-      (implies (and (not (member v (major-stack-bfrlist stack)))
-                    (not (member v (fgl-object-bindings-bfrlist bindings))))
-               (not (member v (major-stack-bfrlist (stack$a-set-minor-bindings bindings stack)))))
-      :hints(("Goal" :in-theory (enable stack$a-set-minor-bindings
-                                        major-stack-bfrlist
-                                        major-frame-bfrlist
-                                        minor-frame-bfrlist
-                                        minor-stack-bfrlist)
-              :expand ((major-stack-bfrlist stack)
-                       (minor-stack-bfrlist (major-frame->minor-stack (car stack))))
-              :do-not-induct t)))
+     (implies (and (not (member v (major-stack-bfrlist stack)))
+                   (not (member v (fgl-object-bindings-bfrlist bindings))))
+              (not (member v (major-stack-bfrlist (stack$a-set-minor-bindings bindings stack)))))
+     :hints(("Goal" :in-theory (enable stack$a-set-minor-bindings
+                                       major-stack-bfrlist
+                                       major-frame-bfrlist
+                                       minor-frame-bfrlist
+                                       minor-stack-bfrlist)
+             :expand ((major-stack-bfrlist stack)
+                      (minor-stack-bfrlist (major-frame->minor-stack (car stack))))
+             :do-not-induct t)))
 
    (defthm major-stack-bfrlist-of-stack$a-add-minor-bindings
-      (set-equiv (major-stack-bfrlist (stack$a-add-minor-bindings bindings stack))
-                 (append (fgl-object-bindings-bfrlist bindings)
-                         (major-stack-bfrlist stack)))
-      :hints(("Goal" :in-theory (enable stack$a-add-minor-bindings
-                                        major-stack-bfrlist
-                                        major-frame-bfrlist
-                                        minor-frame-bfrlist
-                                        minor-stack-bfrlist)
-              :do-not-induct t)))
+     (set-equiv (major-stack-bfrlist (stack$a-add-minor-bindings bindings stack))
+                (append (fgl-object-bindings-bfrlist bindings)
+                        (major-stack-bfrlist stack)))
+     :hints(("Goal" :in-theory (enable stack$a-add-minor-bindings
+                                       major-stack-bfrlist
+                                       major-frame-bfrlist
+                                       minor-frame-bfrlist
+                                       minor-stack-bfrlist)
+             :do-not-induct t)))
 
    (defthm major-stack-bfrlist-of-stack$a-push-frame
-      (equal (major-stack-bfrlist (stack$a-push-frame stack))
-             (major-stack-bfrlist stack))
-      :hints(("Goal" :in-theory (enable stack$a-push-frame
-                                        major-stack-bfrlist
-                                        major-frame-bfrlist
-                                        minor-frame-bfrlist
-                                        minor-stack-bfrlist)
-              :do-not-induct t)))
+     (equal (major-stack-bfrlist (stack$a-push-frame stack))
+            (major-stack-bfrlist stack))
+     :hints(("Goal" :in-theory (enable stack$a-push-frame
+                                       major-stack-bfrlist
+                                       major-frame-bfrlist
+                                       minor-frame-bfrlist
+                                       minor-stack-bfrlist)
+             :do-not-induct t)))
 
    (defthm major-stack-bfrlist-of-stack$a-push-minor-frame
-      (equal (major-stack-bfrlist (stack$a-push-minor-frame stack))
-             (major-stack-bfrlist stack))
-      :hints(("Goal" :in-theory (enable stack$a-push-minor-frame
-                                        major-stack-bfrlist
-                                        major-frame-bfrlist
-                                        minor-frame-bfrlist
-                                        minor-stack-bfrlist)
-              :do-not-induct t)))
+     (equal (major-stack-bfrlist (stack$a-push-minor-frame stack))
+            (major-stack-bfrlist stack))
+     :hints(("Goal" :in-theory (enable stack$a-push-minor-frame
+                                       major-stack-bfrlist
+                                       major-frame-bfrlist
+                                       minor-frame-bfrlist
+                                       minor-stack-bfrlist)
+             :do-not-induct t)))
 
    (defthm major-stack-bfrlist-of-stack$a-pop-frame
-      (implies (not (member v (major-stack-bfrlist stack)))
-               (not (member v (major-stack-bfrlist (stack$a-pop-frame stack)))))
-      :hints(("Goal" :in-theory (enable stack$a-pop-frame
-                                        major-stack-bfrlist
-                                        major-frame-bfrlist
-                                        minor-frame-bfrlist
-                                        minor-stack-bfrlist
-                                        default-car)
-              :do-not-induct t)))
+     (implies (not (member v (major-stack-bfrlist stack)))
+              (not (member v (major-stack-bfrlist (stack$a-pop-frame stack)))))
+     :hints(("Goal" :in-theory (enable stack$a-pop-frame
+                                       major-stack-bfrlist
+                                       major-frame-bfrlist
+                                       minor-frame-bfrlist
+                                       minor-stack-bfrlist
+                                       default-car)
+             :do-not-induct t)))
 
    (defthm major-stack-bfrlist-of-stack$a-pop-minor-frame
-      (implies (not (member v (major-stack-bfrlist stack)))
-               (not (member v (major-stack-bfrlist (stack$a-pop-minor-frame stack)))))
-      :hints(("Goal" :in-theory (enable stack$a-pop-minor-frame
-                                        major-stack-bfrlist
-                                        major-frame-bfrlist
-                                        minor-frame-bfrlist
-                                        minor-stack-bfrlist
-                                        default-car)
-              :do-not-induct t)))
+     (implies (not (member v (major-stack-bfrlist stack)))
+              (not (member v (major-stack-bfrlist (stack$a-pop-minor-frame stack)))))
+     :hints(("Goal" :in-theory (enable stack$a-pop-minor-frame
+                                       major-stack-bfrlist
+                                       major-frame-bfrlist
+                                       minor-frame-bfrlist
+                                       minor-stack-bfrlist
+                                       default-car)
+             :do-not-induct t)))
 
    (defthm fgl-object-bindings-bfrlist-of-stack$a-bindings
-      (implies (not (member v (major-stack-bfrlist stack)))
-               (not (member v (fgl-object-bindings-bfrlist (stack$a-bindings stack)))))
-      :hints(("Goal" :in-theory (enable stack$a-bindings
-                                        major-frame-bfrlist)
-              :expand ((major-stack-bfrlist stack))
-              :do-not-induct t)))
+     (implies (not (member v (major-stack-bfrlist stack)))
+              (not (member v (fgl-object-bindings-bfrlist (stack$a-bindings stack)))))
+     :hints(("Goal" :in-theory (enable stack$a-bindings
+                                       major-frame-bfrlist)
+             :expand ((major-stack-bfrlist stack))
+             :do-not-induct t)))
 
    (defthm fgl-object-bindings-bfrlist-of-stack$a-minor-bindings
-      (implies (not (member v (major-stack-bfrlist stack)))
-               (not (member v (fgl-object-bindings-bfrlist (stack$a-minor-bindings stack)))))
-      :hints(("Goal" :in-theory (enable stack$a-minor-bindings
-                                        major-stack-bfrlist
-                                        major-frame-bfrlist
-                                        minor-stack-bfrlist
-                                        minor-frame-bfrlist)
-              :expand ((major-stack-bfrlist stack)
-                       (minor-stack-bfrlist (major-frame->minor-stack (car stack))))
-              :do-not-induct t)))
+     (implies (not (member v (major-stack-bfrlist stack)))
+              (not (member v (fgl-object-bindings-bfrlist (stack$a-minor-bindings stack)))))
+     :hints(("Goal" :in-theory (enable stack$a-minor-bindings
+                                       major-stack-bfrlist
+                                       major-frame-bfrlist
+                                       minor-stack-bfrlist
+                                       minor-frame-bfrlist)
+             :expand ((major-stack-bfrlist stack)
+                      (minor-stack-bfrlist (major-frame->minor-stack (car stack))))
+             :do-not-induct t)))
 
 
    (defthm scratchobj->bfrlist-of-stack$a-top-scratch
-      (implies (not (member v (major-stack-bfrlist stack)))
-               (not (member v (scratchobj->bfrlist (stack$a-top-scratch stack)))))
-      :hints(("Goal" :in-theory (enable stack$a-top-scratch
-                                        major-frame-bfrlist
-                                        minor-frame-bfrlist)
-              :expand ((major-stack-bfrlist stack)
-                       (minor-stack-bfrlist (major-frame->minor-stack (car stack))))
-              :do-not-induct t)))
+     (implies (not (member v (major-stack-bfrlist stack)))
+              (not (member v (scratchobj->bfrlist (stack$a-top-scratch stack)))))
+     :hints(("Goal" :in-theory (enable stack$a-top-scratch
+                                       major-frame-bfrlist
+                                       minor-frame-bfrlist)
+             :expand ((major-stack-bfrlist stack)
+                      (minor-stack-bfrlist (major-frame->minor-stack (car stack))))
+             :do-not-induct t)))
 
    (defthm scratchobj-bfrlist-of-minor-stack-nth-scratch
      (implies (not (member v (minor-stack-bfrlist stack)))
@@ -2371,107 +2378,107 @@
                                        major-frame-bfrlist))))
 
    (defthm scratchobj->bfrlist-of-stack$a-nth-scratch
-      (implies (not (member v (major-stack-bfrlist stack)))
-               (not (member v (scratchobj->bfrlist (stack$a-nth-scratch n stack)))))
-      :hints(("Goal" :in-theory (enable stack$a-nth-scratch
-                                        major-frame-bfrlist
-                                        minor-frame-bfrlist)
-              :expand ((major-stack-bfrlist stack)
-                       (minor-stack-bfrlist (major-frame->minor-stack (car stack))))
-              :do-not-induct t)))
+     (implies (not (member v (major-stack-bfrlist stack)))
+              (not (member v (scratchobj->bfrlist (stack$a-nth-scratch n stack)))))
+     :hints(("Goal" :in-theory (enable stack$a-nth-scratch
+                                       major-frame-bfrlist
+                                       minor-frame-bfrlist)
+             :expand ((major-stack-bfrlist stack)
+                      (minor-stack-bfrlist (major-frame->minor-stack (car stack))))
+             :do-not-induct t)))
 
 
 
    (defthm major-stack-bfrlist-of-stack$a-set-rule
-      (equal (major-stack-bfrlist (stack$a-set-rule obj stack))
-             (major-stack-bfrlist stack))
-      :hints(("Goal" :in-theory (enable stack$a-set-rule
-                                        major-stack-bfrlist
-                                        major-frame-bfrlist))))
+     (equal (major-stack-bfrlist (stack$a-set-rule obj stack))
+            (major-stack-bfrlist stack))
+     :hints(("Goal" :in-theory (enable stack$a-set-rule
+                                       major-stack-bfrlist
+                                       major-frame-bfrlist))))
 
    (defthm major-stack-bfrlist-of-stack$a-set-phase
-      (equal (major-stack-bfrlist (stack$a-set-phase obj stack))
-             (major-stack-bfrlist stack))
-      :hints(("Goal" :in-theory (enable stack$a-set-phase
-                                        major-stack-bfrlist
-                                        major-frame-bfrlist))))
+     (equal (major-stack-bfrlist (stack$a-set-phase obj stack))
+            (major-stack-bfrlist stack))
+     :hints(("Goal" :in-theory (enable stack$a-set-phase
+                                       major-stack-bfrlist
+                                       major-frame-bfrlist))))
 
    (defthm major-stack-bfrlist-of-stack$a-set-term
-      (equal (major-stack-bfrlist (stack$a-set-term obj stack))
-             (major-stack-bfrlist stack))
-      :hints(("Goal" :in-theory (enable stack$a-set-term
-                                        major-stack-bfrlist
-                                        major-frame-bfrlist
-                                        minor-frame-bfrlist)
-              :expand ((minor-stack-bfrlist (major-frame->minor-stack (car stack))))
-              :do-not-induct t)))
+     (equal (major-stack-bfrlist (stack$a-set-term obj stack))
+            (major-stack-bfrlist stack))
+     :hints(("Goal" :in-theory (enable stack$a-set-term
+                                       major-stack-bfrlist
+                                       major-frame-bfrlist
+                                       minor-frame-bfrlist)
+             :expand ((minor-stack-bfrlist (major-frame->minor-stack (car stack))))
+             :do-not-induct t)))
 
    (defthm major-stack-bfrlist-of-stack$a-set-term-index
-      (equal (major-stack-bfrlist (stack$a-set-term-index obj stack))
-             (major-stack-bfrlist stack))
-      :hints(("Goal" :in-theory (enable stack$a-set-term-index
-                                        major-stack-bfrlist
-                                        major-frame-bfrlist
-                                        minor-frame-bfrlist)
-              :expand ((minor-stack-bfrlist (major-frame->minor-stack (car stack))))
-              :do-not-induct t)))
+     (equal (major-stack-bfrlist (stack$a-set-term-index obj stack))
+            (major-stack-bfrlist stack))
+     :hints(("Goal" :in-theory (enable stack$a-set-term-index
+                                       major-stack-bfrlist
+                                       major-frame-bfrlist
+                                       minor-frame-bfrlist)
+             :expand ((minor-stack-bfrlist (major-frame->minor-stack (car stack))))
+             :do-not-induct t)))
 
    (defthm major-stack-bfrlist-of-stack$a-add-binding
-      (implies (and (not (member v (major-stack-bfrlist stack)))
-                    (not (member v (fgl-object-bfrlist obj))))
-               (not (member v (major-stack-bfrlist (stack$a-add-binding var obj stack)))))
-      :hints(("Goal" :in-theory (enable stack$a-add-binding
-                                        major-stack-bfrlist
-                                        major-frame-bfrlist))))
+     (implies (and (not (member v (major-stack-bfrlist stack)))
+                   (not (member v (fgl-object-bfrlist obj))))
+              (not (member v (major-stack-bfrlist (stack$a-add-binding var obj stack)))))
+     :hints(("Goal" :in-theory (enable stack$a-add-binding
+                                       major-stack-bfrlist
+                                       major-frame-bfrlist))))
 
 
    (defthm bfr-listp-of-fgl-objectlist-bfrlist-cdr
-            (implies (bfr-listp (fgl-objectlist-bfrlist x))
-                     (bfr-listp (fgl-objectlist-bfrlist (cdr x))))
-            :hints(("Goal" :in-theory (enable fgl-objectlist-bfrlist))))
+     (implies (bfr-listp (fgl-objectlist-bfrlist x))
+              (bfr-listp (fgl-objectlist-bfrlist (cdr x))))
+     :hints(("Goal" :in-theory (enable fgl-objectlist-bfrlist))))
 
    (defthm bfr-listp-of-fgl-objectlist-bfrlist-nthcdr
-            (implies (bfr-listp (fgl-objectlist-bfrlist x))
-                     (bfr-listp (fgl-objectlist-bfrlist (nthcdr n x))))
-            :hints(("Goal" :in-theory (enable nthcdr))))
+     (implies (bfr-listp (fgl-objectlist-bfrlist x))
+              (bfr-listp (fgl-objectlist-bfrlist (nthcdr n x))))
+     :hints(("Goal" :in-theory (enable nthcdr))))
 
    (defthm bfr-listp-of-fgl-object-bfrlist-car
-            (implies (bfr-listp (fgl-objectlist-bfrlist x))
-                     (bfr-listp (fgl-object-bfrlist (car x))))
-            :hints(("Goal" :expand ((fgl-objectlist-bfrlist x))
-                    :in-theory (enable default-car))))
+     (implies (bfr-listp (fgl-objectlist-bfrlist x))
+              (bfr-listp (fgl-object-bfrlist (car x))))
+     :hints(("Goal" :expand ((fgl-objectlist-bfrlist x))
+             :in-theory (enable default-car))))
 
    (defthm bfr-listp-of-fgl-objectlist-bfrlist-take
-            (implies (bfr-listp (fgl-objectlist-bfrlist x))
-                     (bfr-listp (fgl-objectlist-bfrlist (take n x))))
-            :hints(("Goal" :in-theory (enable take))))
+     (implies (bfr-listp (fgl-objectlist-bfrlist x))
+              (bfr-listp (fgl-objectlist-bfrlist (take n x))))
+     :hints(("Goal" :in-theory (enable take))))
 
    (defthm fgl-objectlist-bfrlist-of-rev
-            (set-equiv (fgl-objectlist-bfrlist (rev x))
-                       (fgl-objectlist-bfrlist x))
-            :hints(("Goal" :in-theory (enable rev fgl-objectlist-bfrlist))))
+     (set-equiv (fgl-objectlist-bfrlist (rev x))
+                (fgl-objectlist-bfrlist x))
+     :hints(("Goal" :in-theory (enable rev fgl-objectlist-bfrlist))))
 
    (defthm bfr-listp-of-constraint-instancelist-bfrlist-cdr
-            (implies (bfr-listp (constraint-instancelist-bfrlist x))
-                     (bfr-listp (constraint-instancelist-bfrlist (cdr x))))
-            :hints(("Goal" :expand ((constraint-instancelist-bfrlist x))
-                    :in-theory (enable default-cdr))))
+     (implies (bfr-listp (constraint-instancelist-bfrlist x))
+              (bfr-listp (constraint-instancelist-bfrlist (cdr x))))
+     :hints(("Goal" :expand ((constraint-instancelist-bfrlist x))
+             :in-theory (enable default-cdr))))
 
    (defthm bfr-listp-of-constraint-instancelist-bfrlist-car
-            (implies (bfr-listp (constraint-instancelist-bfrlist x))
-                     (bfr-listp (constraint-instance-bfrlist (car x))))
-            :hints(("Goal" :expand ((constraint-instancelist-bfrlist x))
-                    :in-theory (enable default-car))))
+     (implies (bfr-listp (constraint-instancelist-bfrlist x))
+              (bfr-listp (constraint-instance-bfrlist (car x))))
+     :hints(("Goal" :expand ((constraint-instancelist-bfrlist x))
+             :in-theory (enable default-car))))
 
    (defthm fgl-object-bindings-bfrlist-of-constraint-instance->subst
-            (equal (fgl-object-bindings-bfrlist (constraint-instance->subst x))
-                   (constraint-instance-bfrlist x))
-            :hints(("Goal" :expand ((constraint-instance-bfrlist x)))))
+     (equal (fgl-object-bindings-bfrlist (constraint-instance->subst x))
+            (constraint-instance-bfrlist x))
+     :hints(("Goal" :expand ((constraint-instance-bfrlist x)))))
 
    (defthm bfr-p-car-of-bfr-list
-            (implies (bfr-listp x)
-                     (bfr-p (car x)))
-            :hints(("Goal" :in-theory (enable default-car bfr-listp))))
+     (implies (bfr-listp x)
+              (bfr-p (car x)))
+     :hints(("Goal" :in-theory (enable default-car bfr-listp))))
 
 
    ;; (local (in-theory (disable bfr-listp-of-fgl-objectlist-bfrlist
@@ -2608,28 +2615,28 @@
      :hints(("Goal" :in-theory (enable stack$a-push-scratch stack$a-top-scratch))))
 
    (defthm bfr-p-of-scratchobj-bfr->val
-            (implies (double-rewrite (scratchobj-case x :bfr))
-                     (equal (bfr-p (scratchobj-bfr->val x))
-                            (bfr-listp (scratchobj->bfrlist x))))
-            :hints(("Goal" :in-theory (enable scratchobj->bfrlist))))
+     (implies (double-rewrite (scratchobj-case x :bfr))
+              (equal (bfr-p (scratchobj-bfr->val x))
+                     (bfr-listp (scratchobj->bfrlist x))))
+     :hints(("Goal" :in-theory (enable scratchobj->bfrlist))))
 
 
    (encapsulate nil
 
-      (local (include-book "scratchobj"))
+     (local (include-book "scratchobj"))
 
-      (make-event
-       (cons 'progn
-             (acl2::template-proj
-              '(defthm bfrlist-of-scratchobj-<kind>->val-double-rewrite
-                 (implies (double-rewrite (scratchobj-case x :<kind>))
-                          (equal (<prefix>-bfrlist (scratchobj-<kind>->val x))
-                                 (scratchobj->bfrlist x))))
-              (scratchobj-tmplsubsts (set-difference-equal
-                                      *scratchobj-types*
-                                      (acl2::fal-extract
-                                       '(:bfr :bfrlist :fnsym :formals)
-                                       *scratchobj-types*)))))))
+     (make-event
+      (cons 'progn
+            (acl2::template-proj
+             '(defthm bfrlist-of-scratchobj-<kind>->val-double-rewrite
+                (implies (double-rewrite (scratchobj-case x :<kind>))
+                         (equal (<prefix>-bfrlist (scratchobj-<kind>->val x))
+                                (scratchobj->bfrlist x))))
+             (scratchobj-tmplsubsts (set-difference-equal
+                                     *scratchobj-types*
+                                     (acl2::fal-extract
+                                      '(:bfr :bfrlist :fnsym :formals)
+                                      *scratchobj-types*)))))))
 
 
 
@@ -3214,23 +3221,23 @@
            :hints (("goal" :use fgl-ev-falsify))))
 
   (local
-     (defthm fgl-ev-meta-extract-global-facts-when-world-equiv
-       (implies (and (equal (w new) (w old))
-                     (fgl-ev-meta-extract-global-facts :state old))
-                (fgl-ev-meta-extract-global-facts :state new))
-       :hints (("goal" :use ((:instance
-                              (:functional-instance
-                               cmr::base-ev-meta-extract-global-facts-when-world-equiv
-                               (cmr::base-ev fgl-ev)
-                               (cmr::base-ev-list fgl-ev-list)
-                               (cmr::base-ev-meta-extract-global-badguy fgl-ev-meta-extract-global-badguy)
-                               (cmr::base-ev-falsify fgl-ev-falsify))
-                              (old old) (new new)))
-                :in-theory (enable fgl-ev-when-theoremp
-                                   fgl-ev-of-nonsymbol-atom
-                                   fgl-ev-of-bad-fncall
-                                   fgl-ev-of-fncall-args
-                                   fgl-ev-when-global-facts)))))
+   (defthm fgl-ev-meta-extract-global-facts-when-world-equiv
+     (implies (and (equal (w new) (w old))
+                   (fgl-ev-meta-extract-global-facts :state old))
+              (fgl-ev-meta-extract-global-facts :state new))
+     :hints (("goal" :use ((:instance
+                            (:functional-instance
+                             cmr::base-ev-meta-extract-global-facts-when-world-equiv
+                             (cmr::base-ev fgl-ev)
+                             (cmr::base-ev-list fgl-ev-list)
+                             (cmr::base-ev-meta-extract-global-badguy fgl-ev-meta-extract-global-badguy)
+                             (cmr::base-ev-falsify fgl-ev-falsify))
+                            (old old) (new new)))
+              :in-theory (enable fgl-ev-when-theoremp
+                                 fgl-ev-of-nonsymbol-atom
+                                 fgl-ev-of-bad-fncall
+                                 fgl-ev-of-fncall-args
+                                 fgl-ev-when-global-facts)))))
 
 
   ;; (defthmd check-equivbind-hyp-correct
@@ -3292,11 +3299,11 @@
     (and (equal x1.bindings y1.bindings)
          (equal x1.scratch y1.scratch)
          (mbe :logic (and (minor-stack-equiv (cdr x) (cdr y))
-                      (iff (consp (cdr x)) (consp (cdr y))))
-          :exec (if (atom (cdr x))
-                    (atom (cdr y))
-                  (and (consp (cdr y))
-                       (minor-stack-equiv (cdr x) (cdr y)))))))
+                          (iff (consp (cdr x)) (consp (cdr y))))
+              :exec (if (atom (cdr x))
+                        (atom (cdr y))
+                      (and (consp (cdr y))
+                           (minor-stack-equiv (cdr x) (cdr y)))))))
 
   ///
   (defequiv minor-stack-equiv-except-top-debug)
@@ -3526,8 +3533,8 @@
     (stack-equiv-except-top-major/minor-bindings
      (stack$a-add-minor-bindings bindings stack)
      stack)
-  :hints(("Goal" :in-theory (enable stack$a-add-minor-bindings
-                                    major-stack-fix default-car))))
+    :hints(("Goal" :in-theory (enable stack$a-add-minor-bindings
+                                      major-stack-fix default-car))))
 
   (defcong stack-equiv-except-top-major/minor-bindings
     stack-equiv-except-top-bindings
@@ -3662,8 +3669,8 @@
     (stack-equiv-except-top-bindings
      (interp-st->stack new-interp-st)
      (interp-st->stack interp-st))))
-       
-  
+
+
 
 (define fgl-rewrite-relieve-hyp-match-assums-indices ((indices nat-listp)
                                                       (hyp pseudo-termp)
@@ -3762,9 +3769,9 @@
     (stack-equiv-except-top-bindings
      (interp-st->stack new-interp-st)
      (interp-st->stack interp-st))))
-        
-       
-  
+
+
+
 
 
 (define fgl-rewrite-relieve-hyp-match-assums1 ((hyp pseudo-termp)
@@ -4114,6 +4121,67 @@
     (implies (not (equal (interp-st->errmsg interp-st) :unreachable))
              (not (equal (interp-st->errmsg new-interp-st) :unreachable)))))
 
+(define fgl-arglist-substitute-newly-bound ((x fgl-arglist-p)
+                                            interp-st)
+  :returns (new-x fgl-arglist-p)
+  (b* (((when (atom x)) nil)
+       (x1 (car x))
+       ((when (fgl-arg-case x1 :obj))
+        (cons (fgl-arg-fix x1)
+              (fgl-arglist-substitute-newly-bound (cdr x) interp-st)))
+       (var (fgl-arg-unbound->var x1))
+       (look (or (assoc-eq var (interp-st-minor-bindings interp-st))
+                 (assoc-eq var (interp-st-bindings interp-st))))
+       ((when look)
+        (cons (fgl-arg-obj (cdr look))
+              (fgl-arglist-substitute-newly-bound (cdr x) interp-st))))
+    (cons (fgl-arg-fix x1)
+          (fgl-arglist-substitute-newly-bound (cdr x) interp-st)))
+  ///
+  (defretd <fn>-when-all-boundp
+    (implies (fgl-arglist-all-boundp x)
+             (equal new-x (fgl-arglist-fix x)))
+    :hints(("Goal" :in-theory (enable fgl-arglist-all-boundp)))))
+
+(define fgl-arglist-substitute-newly-bound-exec (all-boundp
+                                                 (x fgl-arglist-p)
+                                                 interp-st)
+  :guard (equal all-boundp (fgl-arglist-all-boundp x))
+  :guard-hints (("goal" :in-theory (enable fgl-arglist-substitute-newly-bound-when-all-boundp)))
+  :returns (new-x fgl-arglist-p)
+  :enabled t
+  (mbe :logic (fgl-arglist-substitute-newly-bound x interp-st)
+       :exec (if all-boundp
+                 (fgl-arglist-fix x)
+               (fgl-arglist-substitute-newly-bound x interp-st))))
+
+
+(define fgl-objectlist->arglist ((x fgl-objectlist-p))
+  :returns (new-x fgl-arglist-p)
+  :verify-guards nil
+  (mbe :logic (if (atom x)
+                  nil
+                (cons (fgl-arg-obj (car x))
+                      (fgl-objectlist->arglist (cdr x))))
+       :exec x)
+  ///
+  (local (defret <fn>-identity
+           (implies (fgl-objectlist-p x)
+                    (equal new-x x))
+           :hints(("Goal" :in-theory (enable fgl-arg-obj)))))
+  (verify-guards fgl-objectlist->arglist
+    :hints(("Goal" :in-theory (enable fgl-objectlist-p fgl-arg-obj))))
+  (local (in-theory (disable fgl-objectlist->arglist-identity)))
+  (local (in-theory (enable fgl-objectlist-fix))))
+
+(define interp-st-add-bindings ((bindings fgl-object-bindings-p) interp-st)
+  :enabled t
+  (stobj-let ((stack (interp-st->stack interp-st)))
+             (stack)
+             (stack-set-bindings (append (fgl-object-bindings-fix bindings)
+                                         (stack-bindings stack))
+                                 stack)
+             interp-st))
 
 (progn
   (with-output
@@ -4126,8 +4194,8 @@
                         clause ',(cons 'flag fns))
                        :in-theory (disable . ,fns))))
       (define fgl-interp-test ((x pseudo-termp)
-                              (interp-st interp-st-bfrs-ok)
-                              state)
+                               (interp-st interp-st-bfrs-ok)
+                               state)
         ;; Translate a term to a FGL object under the given alist substitution, preserving IFF.
         :measure (list (nfix (interp-st->reclimit interp-st))
                        2020 (pseudo-term-binding-count x) 30)
@@ -4202,8 +4270,8 @@
                                              nil nil val interp-st state)))
                 (fgl-interp-value (mk-g-boolean xbfr)))))
           (fgl-interp-value val)))
-             
-                       
+      
+      
 
       ;; (define fgl-interp-term-equivs ((x pseudo-termp)
       ;;                                (interp-st interp-st-bfrs-ok)
@@ -4254,16 +4322,16 @@
           (fgl-interp-postprocess-rewritten-obj
            (fgl-hide-term-p x) ;; don't use equivalence replacements if x is a hide term
            xobj interp-st state)))
-          ;;    ((when (interp-st-boolean-fncall-p xobj interp-st (w state)))
-          ;;     (b* (((fgl-interp-value xbfr) (fgl-interp-simplify-if-test
-          ;;                                    nil nil xobj interp-st state)))
-          ;;       (fgl-interp-value (mk-g-boolean xbfr)))))
-          ;; (fgl-interp-value xobj)))
+      ;;    ((when (interp-st-boolean-fncall-p xobj interp-st (w state)))
+      ;;     (b* (((fgl-interp-value xbfr) (fgl-interp-simplify-if-test
+      ;;                                    nil nil xobj interp-st state)))
+      ;;       (fgl-interp-value (mk-g-boolean xbfr)))))
+      ;; (fgl-interp-value xobj)))
 
 
       (define fgl-interp-term ((x pseudo-termp)
-                              (interp-st interp-st-bfrs-ok)
-                              state)
+                               (interp-st interp-st-bfrs-ok)
+                               state)
         :measure (list (nfix (interp-st->reclimit interp-st))
                        2020 (pseudo-term-binding-count x) 20)
         :returns (mv
@@ -4312,8 +4380,8 @@
                         (fgl-interp-fncall-special x.fn x.args interp-st state))
                        ((when successp)
                         (fgl-interp-value ans))
-                       ((when (fgl-binder-args-p x.args interp-st))
-                        (fgl-interp-binder x interp-st state))
+                       ;; ((when (fgl-binder-args-p x.args interp-st))
+                       ;;  (fgl-interp-binder x interp-st state))
 
                        (argcontexts (fgl-interp-arglist-equiv-contexts (interp-st->equiv-contexts interp-st)
                                                                        x.fn (len x.args)
@@ -4323,9 +4391,13 @@
 
                        ((fgl-interp-recursive-call args)
                         (fgl-interp-arglist x.args argcontexts interp-st state))
-
+                       (all-boundp (fgl-arglist-all-boundp args))
+                       (args (fgl-arglist-substitute-newly-bound-exec all-boundp args interp-st))
                        ((when (interp-flags->hide (interp-st->flags interp-st)))
-                        (mv (g-apply x.fn args) interp-st state))
+                        (if all-boundp
+                            (mv (g-apply x.fn (fgl-arglist->objects args)) interp-st state)
+                          (b* ((interp-st (interp-st-set-error :abort-rewrite interp-st)))
+                            (mv nil interp-st state))))
                        ;; ((when err)
                        ;;  (mv nil interp-st state))
                        )
@@ -4335,9 +4407,9 @@
               (fgl-interp-value val)))))
 
       (define fgl-interp-fncall-special ((fn pseudo-fnsym-p)
-                                        (args pseudo-term-listp)
-                                        (interp-st interp-st-bfrs-ok)
-                                        state)
+                                         (args pseudo-term-listp)
+                                         (interp-st interp-st-bfrs-ok)
+                                         state)
         :measure (list (nfix (interp-st->reclimit interp-st))
                        2020 (pseudo-term-list-binding-count args) 100)
         :returns (mv successp
@@ -4347,14 +4419,14 @@
           (pseudo-fnsym-fix fn)
           ((if 3)
            (fgl-interp-if/or (first args)
-                            (second args)
-                            (third args)
-                            interp-st state))
+                             (second args)
+                             (third args)
+                             interp-st state))
           ((return-last 3)
            (fgl-interp-return-last (first args)
-                                  (second args)
-                                  (third args)
-                                  interp-st state))
+                                   (second args)
+                                   (third args)
+                                   interp-st state))
 
           ;; ((bind-var 2)
           ;;  (fgl-interp-bind-var (first args) (second args) interp-st state))
@@ -4396,17 +4468,17 @@
            (fgl-interp-assume (first args)
                               (second args)
                               (third args)
-                             interp-st state))
+                              interp-st state))
 
           ((narrow-equiv 2)
            (fgl-interp-narrow-equiv (first args)
-                                   (second args)
-                                   interp-st state))
+                                    (second args)
+                                    interp-st state))
 
           ((fgl-time-fn 2)
            (fgl-interp-time$ (first args)
-                            (second args)
-                            interp-st state))
+                             (second args)
+                             interp-st state))
 
           ;; ((fgl-prog2 2)
           ;;  (fgl-interp-prog2 (first args)
@@ -4463,9 +4535,17 @@
         :measure (list (nfix (interp-st->reclimit interp-st))
                        2020 (pseudo-term-list-binding-count args) 20)
         :returns (mv
-                  (arg-objs fgl-objectlist-p)
+                  (arg-objs fgl-arglist-p)
                   new-interp-st new-state)
         (b* (((when (atom args)) (fgl-interp-value nil))
+             (arg1 (car args))
+             ((when (pseudo-term-case arg1
+                      :var (and (not (assoc-eq arg1.name (interp-st-minor-bindings interp-st)))
+                                (not (assoc-eq arg1.name (interp-st-bindings interp-st))))
+                      :otherwise nil))
+              (b* (((fgl-interp-value rest)
+                    (fgl-interp-arglist (cdr args) (equiv-argcontexts-rest argcontexts) interp-st state)))
+                (fgl-interp-value (cons (fgl-arg-unbound (pseudo-term-var->name arg1)) rest))))
              ((interp-st-bind
                (equiv-contexts (equiv-argcontexts-first argcontexts)))
               ((fgl-interp-recursive-call arg1)
@@ -4475,7 +4555,7 @@
              ((fgl-interp-value rest)
               (fgl-interp-arglist (cdr args) (equiv-argcontexts-rest argcontexts) interp-st state))
              ((mv arg interp-st) (interp-st-pop-scratch-fgl-obj interp-st)))
-          (fgl-interp-value (cons arg rest))))
+          (fgl-interp-value (cons (fgl-arg-obj arg) rest))))
 
       (define fgl-interp-lambda-arglist ((args pseudo-term-listp)
                                          (interp-st interp-st-bfrs-ok)
@@ -4496,8 +4576,8 @@
           (fgl-interp-value (cons arg rest))))
 
       (define fgl-interp-bindinglist ((bindings cmr::bindinglist-p)
-                                     (interp-st interp-st-bfrs-ok)
-                                     state)
+                                      (interp-st interp-st-bfrs-ok)
+                                      state)
         :measure (list (nfix (interp-st->reclimit interp-st))
                        2020
                        (cmr::bindinglist-count bindings)
@@ -4514,16 +4594,17 @@
           (fgl-interp-bindinglist (cdr bindings) interp-st state)))
 
       (define fgl-interp-fncall-casesplit ((fn pseudo-fnsym-p)
-                                          (args fgl-objectlist-p)
-                                          (interp-st interp-st-bfrs-ok)
-                                          state)
+                                           (args fgl-arglist-p)
+                                           (interp-st interp-st-bfrs-ok)
+                                           state)
 
         :guard (fgl-objectlist-bfrs-ok args (interp-st-bfrstate))
         :measure (list (nfix (interp-st->reclimit interp-st))
                        2010 0 12)
         :returns (mv (ans fgl-object-p)
                      new-interp-st new-state)
-        (b* ((ite (fgl-objectlist-find-ite args))
+        (b* ((ite (and (fgl-arglist-all-boundp args)
+                       (fgl-objectlist-find-ite (fgl-arglist->objects args))))
              ((unless (and** ite
                              ;; bozo should this be another flag?
                              (interp-flags->branch-on-ifs (interp-st->flags interp-st))
@@ -4533,7 +4614,7 @@
                                    (interp-st->config interp-st))))))
               (fgl-interp-fncall fn args interp-st state))
              (test (g-ite->test ite))
-             ((mv then-args else-args) (fgl-objectlist-split test args))
+             ((mv then-args else-args) (fgl-objectlist-split test (fgl-arglist->objects args)))
              (interp-st (interp-st-push-scratch-fgl-objlist else-args interp-st))
              (interp-st (interp-st-push-scratch-fgl-objlist then-args interp-st))
              ((fgl-interp-recursive-call testbfr)
@@ -4545,11 +4626,11 @@
           (fgl-interp-fncall-casesplit-branches testbfr fn then-args else-args interp-st state)))
 
       (define fgl-interp-fncall-casesplit-branches ((testbfr interp-st-bfr-p)
-                                                   (fn pseudo-fnsym-p)
-                                                   (then-args fgl-objectlist-p)
-                                                   (else-args fgl-objectlist-p)
-                                                   (interp-st interp-st-bfrs-ok)
-                                                   state)
+                                                    (fn pseudo-fnsym-p)
+                                                    (then-args fgl-objectlist-p)
+                                                    (else-args fgl-objectlist-p)
+                                                    (interp-st interp-st-bfrs-ok)
+                                                    state)
 
         :guard (and (fgl-objectlist-bfrs-ok then-args (interp-st-bfrstate))
                     (fgl-objectlist-bfrs-ok else-args (interp-st-bfrstate)))
@@ -4580,10 +4661,10 @@
 
 
       (define fgl-maybe-interp-fncall-casesplit ((test interp-st-bfr-p)
-                                                (fn pseudo-fnsym-p)
-                                                (args fgl-objectlist-p)
-                                                (interp-st interp-st-bfrs-ok)
-                                                state)
+                                                 (fn pseudo-fnsym-p)
+                                                 (args fgl-objectlist-p)
+                                                 (interp-st interp-st-bfrs-ok)
+                                                 state)
         :guard (fgl-objectlist-bfrs-ok args (interp-st-bfrstate))
         :measure (list (nfix (interp-st->reclimit interp-st))
                        2010 0 10)
@@ -4608,7 +4689,7 @@
              ((interp-st-bind
                (reclimit (1- reclimit) reclimit))
               ((fgl-interp-value ans)
-               (fgl-interp-fncall-casesplit fn args interp-st state)))
+               (fgl-interp-fncall-casesplit fn (fgl-objectlist->arglist args) interp-st state)))
              (interp-st (interp-st-pathcond-rewind interp-st))
              ((when (eq (interp-st->errmsg interp-st) :unreachable))
               (b* ((interp-st (update-interp-st->errmsg nil interp-st))
@@ -4618,19 +4699,19 @@
                      (fgl-reachability-sat-check-config-wrapper
                       (fgl-config->sat-config-reachability (interp-st->config interp-st)))
                      t interp-st state))
-                     ((when (eq status :unsat))
-                      ;; unreachable outside the new assumption as well
-                      (b* ((interp-st (interp-st-set-error :unreachable interp-st)))
-                        (fgl-interp-value nil nil))))
+                   ((when (eq status :unsat))
+                    ;; unreachable outside the new assumption as well
+                    (b* ((interp-st (interp-st-set-error :unreachable interp-st)))
+                      (fgl-interp-value nil nil))))
                 (fgl-interp-value t nil))))
           (fgl-interp-value nil ans)))
 
 
       (define fgl-interp-fncall ((fn pseudo-fnsym-p)
-                                (args fgl-objectlist-p)
-                                (interp-st interp-st-bfrs-ok)
-                                state)
-        :guard (fgl-objectlist-bfrs-ok args (interp-st-bfrstate))
+                                 (args fgl-arglist-p)
+                                 (interp-st interp-st-bfrs-ok)
+                                 state)
+        :guard (bfr-listp (fgl-arglist-bfrlist args) (interp-st-bfrstate))
         :measure (list (nfix (interp-st->reclimit interp-st))
                        1700 0 0)
         :returns (mv
@@ -4639,7 +4720,7 @@
         (b* ((fn (pseudo-fnsym-fix fn))
              ((fgl-function-mode fn-mode)
               (fgl-function-mode-lookup fn (fgl-config->function-modes
-                                           (interp-st->config interp-st))))
+                                            (interp-st->config interp-st))))
              ((mv successp ans)
               (fncall-try-concrete-eval fn args fn-mode.dont-concrete-exec
                                         (member-eq 'unequiv (interp-st->equiv-contexts interp-st))
@@ -4648,19 +4729,23 @@
               (b* ((interp-st (interp-st-tick-steplimit interp-st)) ;; count execution of the function as a step
                    (interp-st (interp-st-prof-simple-increment-exec fn interp-st)))
                 (fgl-interp-value ans)))
-             (interp-st (interp-st-push-scratch-fgl-objlist args interp-st))
+             (interp-st (interp-st-push-scratch-fgl-arglist args interp-st))
              ((fgl-interp-recursive-call successp ans)
               (fgl-rewrite-fncall fn args fn-mode.dont-rewrite interp-st state))
-             ((mv args interp-st) (interp-st-pop-scratch-fgl-objlist interp-st))
+             ((mv args interp-st) (interp-st-pop-scratch-fgl-arglist interp-st))
+             ((unless (or successp
+                          (fgl-arglist-all-boundp args)))
+              (b* ((interp-st (interp-st-set-error :abort-rewrite interp-st)))
+                (fgl-interp-value nil)))
              (ans (if successp ans (g-apply fn args))))
           (fgl-interp-postprocess-rewritten-obj (eq fn 'fgl-hide) ans interp-st state)))
 
 
       (define fgl-rewrite-fncall ((fn pseudo-fnsym-p)
-                                 (args fgl-objectlist-p)
-                                 (dont)
-                                 (interp-st interp-st-bfrs-ok)
-                                 state)
+                                  (args fgl-arglist-p)
+                                  (dont)
+                                  (interp-st interp-st-bfrs-ok)
+                                  state)
         :guard (fgl-objectlist-bfrs-ok args (interp-st-bfrstate))
         :measure (list (nfix (interp-st->reclimit interp-st)) 0 0 0)
         :returns (mv successp
@@ -4674,7 +4759,7 @@
              ((mv rules interp-st) (interp-st-function-rules fn interp-st state))
              ((unless rules)
               (fgl-interp-value nil nil))
-             (interp-st (interp-st-push-scratch-fgl-objlist args interp-st))
+             (interp-st (interp-st-push-scratch-fgl-arglist args interp-st))
              ((interp-st-bind
                (reclimit (1- reclimit) reclimit))
               ((fgl-interp-value successp ans)
@@ -4688,7 +4773,7 @@
                                      (interp-st interp-st-bfrs-ok)
                                      state)
         :guard (and (< 0 (interp-st-scratch-len interp-st))
-                    (scratchobj-case (interp-st-top-scratch interp-st) :fgl-objlist))
+                    (scratchobj-case (interp-st-top-scratch interp-st) :fgl-arglist))
         ;; :guard (fgl-objectlist-bfrs-ok args (interp-st-bfrstate))
         :measure (list (nfix (interp-st->reclimit interp-st)) 10000 (len rules) 0)
         :returns (mv successp
@@ -4705,9 +4790,9 @@
       (define fgl-rewrite-try-rule ((rule fgl-rule-p)
                                     (fn pseudo-fnsym-p)
                                     (interp-st interp-st-bfrs-ok)
-                                   state)
+                                    state)
         :guard (and (< 0 (interp-st-scratch-len interp-st))
-                    (scratchobj-case (interp-st-top-scratch interp-st) :fgl-objlist))
+                    (scratchobj-case (interp-st-top-scratch interp-st) :fgl-arglist))
         :measure (list (nfix (interp-st->reclimit interp-st)) 10000 0 2)
         :returns (mv successp
                      (ans fgl-object-p)
@@ -4724,6 +4809,7 @@
       (define fgl-rewrite-apply-rule ((rule fgl-generic-rule-p)
                                       (fn pseudo-fnsym-p)
                                       (bindings fgl-object-bindings-p)
+                                      (rev-subst pseudo-term-subst-p)
                                       (hyps pseudo-term-listp)
                                       (rhs pseudo-termp)
                                       (rhs-equiv equiv-contextsp)
@@ -4772,6 +4858,9 @@
                 ;; rules.
                 (fgl-interp-value (interp-st->errmsg interp-st) nil nil)))
 
+             ((fgl-interp-recursive-call rev-bindings)
+              (fgl-rewrite-reverse-subst rev-subst interp-st state))
+
              (interp-st (interp-st-set-term rhs interp-st))
              (interp-st (interp-st-set-term-index nil interp-st))
              ((interp-st-bind
@@ -4795,7 +4884,8 @@
              (interp-st (interp-st-cancel-error :abort-rewrite interp-st))
              (interp-st (interp-st-prof-pop-increment (not err) interp-st))
              (new-bindings (interp-st-bindings interp-st))
-             (interp-st (interp-st-pop-frame interp-st)))
+             (interp-st (interp-st-pop-frame interp-st))
+             (interp-st (interp-st-add-bindings rev-bindings interp-st)))
           (fgl-interp-value successp val new-bindings)))
 
       (define fgl-rewrite-try-rewrite ((rule fgl-rule-p)
@@ -4804,7 +4894,7 @@
                                        state)
         :guard (and (fgl-rule-case rule :rewrite)
                     (< 0 (interp-st-scratch-len interp-st))
-                    (scratchobj-case (interp-st-top-scratch interp-st) :fgl-objlist))
+                    (scratchobj-case (interp-st-top-scratch interp-st) :fgl-arglist))
         :measure (list (nfix (interp-st->reclimit interp-st)) 10000 0 1)
         :returns (mv successp
                      (ans fgl-object-p)
@@ -4817,18 +4907,20 @@
                                                          (interp-st->equiv-contexts interp-st))
                            (pseudo-term-case rule.lhs :fncall)))
               (fgl-interp-value nil nil))
-             (args (interp-st-top-scratch-fgl-objlist interp-st))
+             (args (interp-st-top-scratch-fgl-arglist interp-st))
              ;; (rule.lhs.args (pseudo-term-call->args rule.lhs))
-             ((mv unify-ok bindings) (fgl-unify-term/gobj-fn/args
-                                      (pseudo-term-fncall->fn rule.lhs)
-                                      (pseudo-term-call->args rule.lhs)
-                                      fn args
-                                      nil (interp-st-bfrstate)))
+             ((mv unify-ok bindings rev-subst)
+              (fgl-unify-term/gobj-fn/args-masked
+               (pseudo-term-fncall->fn rule.lhs)
+               (pseudo-term-call->args rule.lhs)
+               fn args
+               nil nil (interp-st-bfrstate)))
              ((unless unify-ok) (fgl-interp-value nil nil))
              ((fgl-interp-value successp ans ?bindings)
               (fgl-rewrite-apply-rule
                (fgl-rule-fix rule) fn
                bindings
+               rev-subst
                rule.hyps
                rule.rhs
                (interp-st->equiv-contexts interp-st)
@@ -4932,8 +5024,8 @@
           (fgl-rewrite-relieve-hyps rule fn (cdr hyps) tracep interp-st state)))
 
       (define fgl-rewrite-relieve-hyp ((hyp pseudo-termp)
-                                      (interp-st interp-st-bfrs-ok)
-                                      state)
+                                       (interp-st interp-st-bfrs-ok)
+                                       state)
         :measure (list (nfix (interp-st->reclimit interp-st)) 9000
                        (pseudo-term-binding-count hyp) 0)
         :returns (mv successp
@@ -4957,10 +5049,33 @@
           ;; Could check against the pathcond here...
           (fgl-interp-value (eq test-bfr t))))
 
+      (define fgl-rewrite-reverse-subst ((subst pseudo-term-subst-p)
+                                         (interp-st interp-st-bfrs-ok)
+                                         state)
+        :measure (list (nfix (interp-st->reclimit interp-st))
+                       5000 (len subst) 0)
+        :returns (mv (bindings fgl-object-bindings-p)
+                     new-interp-st new-state)
+        (b* (((when (atom subst))
+              (fgl-interp-value nil))
+             ((unless (mbt (and (consp (car subst))
+                                (pseudo-var-p (caar subst)))))
+              (fgl-rewrite-reverse-subst (cdr subst) interp-st state))
+             ((cons var term) (car subst))
+             (interp-st (interp-st-set-term term interp-st))
+             (interp-st (interp-st-set-term-index nil interp-st))
+             ((interp-st-bind
+               (equiv-contexts nil))
+              ((fgl-interp-recursive-call val)
+               (fgl-interp-term-top term interp-st state)))
+             ((fgl-interp-value rest)
+              (fgl-rewrite-reverse-subst (cdr subst) interp-st state)))
+          (fgl-interp-value (cons (cons var val) rest))))
+
       (define fgl-interp-time$ ((timing-arg pseudo-termp)
-                               (x pseudo-termp)
-                               (interp-st interp-st-bfrs-ok)
-                               state)
+                                (x pseudo-termp)
+                                (interp-st interp-st-bfrs-ok)
+                                state)
         :measure (list (nfix (interp-st->reclimit interp-st)) 2020
                        (+ (pseudo-term-binding-count timing-arg)
                           (pseudo-term-binding-count x))
@@ -4981,10 +5096,10 @@
 
 
       (define fgl-interp-return-last ((return-last-fnname pseudo-termp)
-                                     (first-arg pseudo-termp)
-                                     (x pseudo-termp)
-                                     (interp-st interp-st-bfrs-ok)
-                                     state)
+                                      (first-arg pseudo-termp)
+                                      (x pseudo-termp)
+                                      (interp-st interp-st-bfrs-ok)
+                                      state)
         :measure (list (nfix (interp-st->reclimit interp-st)) 2020
                        (+ (pseudo-term-binding-count first-arg)
                           (pseudo-term-binding-count x))
@@ -5065,7 +5180,7 @@
               (fgl-interp-error :msg (fgl-msg "Bad binder form -- the ~
                                                argument must be a function ~
                                                call, but was ~x0."
-                                            (pseudo-term-fix form))))
+                                              (pseudo-term-fix form))))
              ((pseudo-term-fncall form))
              ((unless (and (consp form.args)
                            (pseudo-term-case (car form.args) :var)))
@@ -5107,7 +5222,7 @@
               (fgl-interp-error
                :msg (fgl-msg "Binder error: ~x0 was supposed to be bound in ~
                              a binder form but was already bound."
-                            varname)))
+                             varname)))
 
              ((fgl-interp-recursive-call successp var-val)
               (fgl-rewrite-binder-fncall form.fn argvals interp-st state))
@@ -5190,7 +5305,7 @@
              ((when (and** rule.hyps (eql 0 backchain-limit)))
               (fgl-interp-value nil nil))
              ((unless (fgl-interp-equiv-refinementp rule.equiv
-                                                   (interp-st->equiv-contexts interp-st)))
+                                                    (interp-st->equiv-contexts interp-st)))
               (fgl-interp-value nil nil))
              ((unless (eq rule.lhs-fn (pseudo-fnsym-fix fn)))
               (fgl-interp-value nil nil))
@@ -5203,14 +5318,14 @@
              ((unless unify-ok) (fgl-interp-value nil nil))
              ((fgl-interp-value successp ans ?bindings)
               (fgl-rewrite-apply-rule
-               (fgl-binder-rule-fix rule) fn bindings rule.hyps
+               (fgl-binder-rule-fix rule) fn bindings nil rule.hyps
                rule.rhs (list rule.r-equiv) interp-st state)))
           (fgl-interp-value successp ans)))
 
       (define fgl-rewrite-binder-try-meta ((rule fgl-binder-rule-p)
-                                              (fn pseudo-fnsym-p)
-                                              (interp-st interp-st-bfrs-ok)
-                                              state)
+                                           (fn pseudo-fnsym-p)
+                                           (interp-st interp-st-bfrs-ok)
+                                           state)
         :guard (and (fgl-binder-rule-case rule :bmeta)
                     (< 0 (interp-st-scratch-len interp-st))
                     (scratchobj-case (interp-st-top-scratch interp-st) :fgl-objlist))
@@ -5280,10 +5395,10 @@
           (fgl-interp-value successp val)))
 
       (define fgl-interp-if/or ((test pseudo-termp)
-                               (then pseudo-termp)
-                               (else pseudo-termp)
-                               (interp-st interp-st-bfrs-ok)
-                               state)
+                                (then pseudo-termp)
+                                (else pseudo-termp)
+                                (interp-st interp-st-bfrs-ok)
+                                state)
         :measure (list (nfix (interp-st->reclimit interp-st))
                        2020
                        (+ (pseudo-term-binding-count test)
@@ -5302,10 +5417,10 @@
             (fgl-interp-if-nonbranching test then else interp-st state))))
 
       (define fgl-interp-if-nonbranching ((test pseudo-termp)
-                                         (then pseudo-termp)
-                                         (else pseudo-termp)
-                                         (interp-st interp-st-bfrs-ok)
-                                         state)
+                                          (then pseudo-termp)
+                                          (else pseudo-termp)
+                                          (interp-st interp-st-bfrs-ok)
+                                          state)
 
         :measure (list (nfix (interp-st->reclimit interp-st))
                        2020
@@ -5326,8 +5441,8 @@
                                              nonbranching context -- see ~
                                              debug obj. Resulted from term: ~
                                              ~x0"
-                                            (pseudo-term-fix test))
-                               :debug-obj boolfix)))
+                                              (pseudo-term-fix test))
+                                :debug-obj boolfix)))
           (if (g-concrete->val boolfix)
               (b* (((fgl-interp-value ans)
                     (fgl-interp-term-top then interp-st state))
@@ -5337,9 +5452,9 @@
               (fgl-interp-term-top else interp-st state)))))
 
       (define fgl-interp-or-nonbranching ((test pseudo-termp)
-                                         (else pseudo-termp)
-                                         (interp-st interp-st-bfrs-ok)
-                                         state)
+                                          (else pseudo-termp)
+                                          (interp-st interp-st-bfrs-ok)
+                                          state)
 
         :measure (list (nfix (interp-st->reclimit interp-st))
                        2020
@@ -5360,8 +5475,8 @@
                                              nonbranching context -- see ~
                                              debug obj. Resulted from term: ~
                                              ~x0"
-                                            (pseudo-term-fix test))
-                               :debug-obj boolfix)))
+                                              (pseudo-term-fix test))
+                                :debug-obj boolfix)))
           (if (g-concrete->val boolfix)
               (b* ((interp-st (interp-st-incr-term-index
                                (+ (fgl-minor-frame-subterm-count test)
@@ -5373,10 +5488,10 @@
 
 
       (define fgl-interp-if ((test pseudo-termp)
-                            (then pseudo-termp)
-                            (else pseudo-termp)
-                            (interp-st interp-st-bfrs-ok)
-                            state)
+                             (then pseudo-termp)
+                             (else pseudo-termp)
+                             (interp-st interp-st-bfrs-ok)
+                             state)
         :measure (list (nfix (interp-st->reclimit interp-st))
                        2020
                        (+ (pseudo-term-binding-count test)
@@ -5414,9 +5529,9 @@
 
 
       (define fgl-interp-or ((test pseudo-termp)
-                            (else pseudo-termp)
-                            (interp-st interp-st-bfrs-ok)
-                            state)
+                             (else pseudo-termp)
+                             (interp-st interp-st-bfrs-ok)
+                             state)
         :measure (list (nfix (interp-st->reclimit interp-st))
                        2020
                        (+ (pseudo-term-binding-count test)
@@ -5530,9 +5645,9 @@
           (fgl-interp-value ans)))
 
       (define fgl-interp-narrow-equiv ((equiv pseudo-termp)
-                                     (x pseudo-termp)
-                                     (interp-st interp-st-bfrs-ok)
-                                     state)
+                                       (x pseudo-termp)
+                                       (interp-st interp-st-bfrs-ok)
+                                       state)
         :measure (list (nfix (interp-st->reclimit interp-st))
                        2020
                        (+ (pseudo-term-binding-count equiv)
@@ -5547,21 +5662,21 @@
               (fgl-interp-error :msg (fgl-msg "First argument to narrow-equiv ~
                                              yielded a non-constant object: ~
                                              args ~x0."
-                                            (list (pseudo-term-fix equiv) (pseudo-term-fix x)))))
+                                              (list (pseudo-term-fix equiv) (pseudo-term-fix x)))))
              (contexts (g-concrete->val equivobj))
              ((unless (equiv-contextsp contexts))
               (fgl-interp-error :msg (fgl-msg "First argument to narrow-equiv ~
                                              yielded a value that did not ~
                                              satisfy equiv-contextsp: args ~
                                              ~x0."
-                                            (list (pseudo-term-fix equiv) (pseudo-term-fix x)))))
+                                              (list (pseudo-term-fix equiv) (pseudo-term-fix x)))))
              ((unless (equiv-contexts-coarsening-p (interp-st->equiv-contexts interp-st) contexts))
               (fgl-interp-error :msg (fgl-msg "First argument to narrow-equiv ~
                                              yielded a value was not a ~
                                              narrowing of the current equiv ~
                                              contexts: ~x0.  Current equiv contexts: ~x1"
-                                            (pseudo-term-fix equiv)
-                                            (interp-st->equiv-contexts interp-st))))
+                                              (pseudo-term-fix equiv)
+                                              (interp-st->equiv-contexts interp-st))))
              ((interp-st-bind
                (equiv-contexts contexts))
               ((fgl-interp-value ans)
@@ -5587,8 +5702,8 @@
       ;;     (fgl-interp-term-equivs x interp-st state)))
 
       (define fgl-interp-fgl-interp-obj ((x pseudo-termp)
-                                        (interp-st interp-st-bfrs-ok)
-                                        state)
+                                         (interp-st interp-st-bfrs-ok)
+                                         state)
         :measure (list (nfix (interp-st->reclimit interp-st))
                        2020
                        (pseudo-term-binding-count x)
@@ -5598,7 +5713,7 @@
                   new-interp-st new-state)
         (b* (((unless (member-eq 'unequiv (interp-st->equiv-contexts interp-st)))
               (fgl-interp-error :msg (fgl-msg "Fgl-interp-obj called not in an unequiv context: args ~x0."
-                                            (list (pseudo-term-fix x)))))
+                                              (list (pseudo-term-fix x)))))
              (reclimit (interp-st->reclimit interp-st))
              ((when (fgl-interp-check-reclimit interp-st))
               (fgl-interp-error :msg (fgl-msg "The recursion limit ran out.")))
@@ -5608,7 +5723,7 @@
               (fgl-interp-error :msg (fgl-msg "First argument to fgl-interp-obj ~
                                              yielded a non-constant object: ~
                                              args ~x0."
-                                            (list (pseudo-term-fix x)))))
+                                              (list (pseudo-term-fix x)))))
              (term (g-concrete->val xobj))
              ((unless (easy-termp term (w state)))
               (fgl-interp-error :msg (fgl-msg "First argument to fgl-interp-obj ~
@@ -5641,46 +5756,46 @@
                   new-interp-st new-state)
         ;; (pseudo-term-case x
         ;;   :call
-          (b* (((when (interp-st->errmsg interp-st))
-                ;; We cancel an error below, so we need to ensure it's not one that originated outside of this call.
-                (fgl-interp-value nil nil))
-               (unconditionalp (pseudo-term-case x
-                                 :fncall (eq x.fn 'unconditional)
-                                 :otherwise nil))
-               ((when unconditionalp)
-                (b* (((fgl-interp-value ans)
-                      (fgl-interp-term-top x interp-st state))
-                     ((when (eq (interp-st->errmsg interp-st) :unreachable))
-                      (b* ((interp-st (update-interp-st->errmsg nil interp-st)))
-                        (fgl-interp-value t nil))))
-                  (fgl-interp-value nil ans)))
-               ((mv contra interp-st)
-                (interp-st-pathcond-assume test interp-st))
-               ((when contra)
-                (b* ((interp-st (interp-st-incr-term-index (fgl-minor-frame-subterm-count x) interp-st)))
-                  (fgl-interp-value t nil)))
-               ((fgl-interp-value ans)
-                (fgl-interp-term-top x interp-st state))
-               (interp-st (interp-st-pathcond-rewind interp-st))
-               ((when (eq (interp-st->errmsg interp-st) :unreachable))
-                (b* ((interp-st (update-interp-st->errmsg nil interp-st))
-                     ((mv status interp-st state)
-                      ;; Check whether we're still in an unreachable state without the new assumption.
-                      (interp-st-sat-check
-                       (fgl-reachability-sat-check-config-wrapper
-                        (fgl-config->sat-config-reachability (interp-st->config interp-st)))
-                       t interp-st state))
-                     ((when (eq status :unsat))
-                      ;; unreachable outside the new assumption as well
-                      (b* ((interp-st (interp-st-set-error :unreachable interp-st)))
-                        (fgl-interp-value nil nil))))
-                  (fgl-interp-value t nil))))
-            (fgl-interp-value nil ans)))
+        (b* (((when (interp-st->errmsg interp-st))
+              ;; We cancel an error below, so we need to ensure it's not one that originated outside of this call.
+              (fgl-interp-value nil nil))
+             (unconditionalp (pseudo-term-case x
+                               :fncall (eq x.fn 'unconditional)
+                               :otherwise nil))
+             ((when unconditionalp)
+              (b* (((fgl-interp-value ans)
+                    (fgl-interp-term-top x interp-st state))
+                   ((when (eq (interp-st->errmsg interp-st) :unreachable))
+                    (b* ((interp-st (update-interp-st->errmsg nil interp-st)))
+                      (fgl-interp-value t nil))))
+                (fgl-interp-value nil ans)))
+             ((mv contra interp-st)
+              (interp-st-pathcond-assume test interp-st))
+             ((when contra)
+              (b* ((interp-st (interp-st-incr-term-index (fgl-minor-frame-subterm-count x) interp-st)))
+                (fgl-interp-value t nil)))
+             ((fgl-interp-value ans)
+              (fgl-interp-term-top x interp-st state))
+             (interp-st (interp-st-pathcond-rewind interp-st))
+             ((when (eq (interp-st->errmsg interp-st) :unreachable))
+              (b* ((interp-st (update-interp-st->errmsg nil interp-st))
+                   ((mv status interp-st state)
+                    ;; Check whether we're still in an unreachable state without the new assumption.
+                    (interp-st-sat-check
+                     (fgl-reachability-sat-check-config-wrapper
+                      (fgl-config->sat-config-reachability (interp-st->config interp-st)))
+                     t interp-st state))
+                   ((when (eq status :unsat))
+                    ;; unreachable outside the new assumption as well
+                    (b* ((interp-st (interp-st-set-error :unreachable interp-st)))
+                      (fgl-interp-value nil nil))))
+                (fgl-interp-value t nil))))
+          (fgl-interp-value nil ans)))
 
       (define fgl-interp-maybe-simplify-if-test ((test interp-st-bfr-p)
-                                                (xobj fgl-object-p)
-                                                (interp-st interp-st-bfrs-ok)
-                                                state)
+                                                 (xobj fgl-object-p)
+                                                 (interp-st interp-st-bfrs-ok)
+                                                 state)
         :guard (fgl-object-bfrs-ok xobj (interp-st-bfrstate))
         :measure (list (nfix (interp-st->reclimit interp-st))
                        0
@@ -5767,8 +5882,8 @@
 
       ;; BOZO should we have a version of this for OR?
       (define fgl-interp-simplify-if-test-ite ((xobj fgl-object-p)
-                                              (interp-st interp-st-bfrs-ok)
-                                              state)
+                                               (interp-st interp-st-bfrs-ok)
+                                               state)
         :guard (and (fgl-object-case xobj :g-ite)
                     (fgl-object-bfrs-ok xobj (interp-st-bfrstate)))
         :returns (mv
@@ -5836,7 +5951,7 @@
              ((g-apply xobj))
              ((fgl-function-mode fn-mode)
               (fgl-function-mode-lookup xobj.fn (fgl-config->function-modes
-                                                (interp-st->config interp-st))))
+                                                 (interp-st->config interp-st))))
 
              ;; We rewrite this fncall again because it presumably might not have
              ;; been done in IFF context before.  E.g.
@@ -5908,10 +6023,10 @@
 
 
       (define fgl-interp-add-constraints ((xobj fgl-object-p)
-                                         (interp-st interp-st-bfrs-ok)
-                                         state)
+                                          (interp-st interp-st-bfrs-ok)
+                                          state)
         :guard (and ;; (fgl-object-case xobj :g-apply)
-                    (fgl-object-bfrs-ok xobj (interp-st-bfrstate)))
+                (fgl-object-bfrs-ok xobj (interp-st-bfrstate)))
         :measure (list (nfix (interp-st->reclimit interp-st))
                        1400
                        (fgl-object-count xobj)
@@ -5927,11 +6042,11 @@
               (fgl-interp-error :msg (fgl-msg "The recursion limit ran out.") :nvals 0))
              ;; Disable the pathcond so that constraint thms are simulated in an empty (universal) context.
              ((fgl-interp-value pathcond-enabledp) (stobj-let ((pathcond (interp-st->pathcond interp-st)))
-                                                          (enabledp pathcond)
-                                                          (b* ((enabledp (pathcond-enabledp pathcond))
-                                                               (pathcond (update-pathcond-enabledp nil pathcond)))
-                                                            (mv enabledp pathcond))
-                                                          (fgl-interp-value enabledp)))
+                                                              (enabledp pathcond)
+                                                              (b* ((enabledp (pathcond-enabledp pathcond))
+                                                                   (pathcond (update-pathcond-enabledp nil pathcond)))
+                                                                (mv enabledp pathcond))
+                                                              (fgl-interp-value enabledp)))
 
              ;; (flags (interp-st->flags interp-st))
              ;; (new-flags  (!interp-flags->intro-synvars
@@ -5954,8 +6069,8 @@
 
 
       (define fgl-interp-add-constraints-for-substs ((substs constraint-instancelist-p)
-                                                    (interp-st interp-st-bfrs-ok)
-                                                    state)
+                                                     (interp-st interp-st-bfrs-ok)
+                                                     state)
         :guard (constraint-instancelist-bfrs-ok substs (interp-st-bfrstate))
         :measure (list (nfix (interp-st->reclimit interp-st))
                        10000
@@ -5986,10 +6101,10 @@
              ;; ((when err)
              ;;  (mv interp-st state))
              ((fgl-interp-value contra) (stobj-let ((constraint-pathcond (interp-st->constraint interp-st))
-                                                (logicman (interp-st->logicman interp-st)))
-                                               (contra constraint-pathcond)
-                                               (logicman-pathcond-assume bfr constraint-pathcond)
-                                               (fgl-interp-value contra)))
+                                                    (logicman (interp-st->logicman interp-st)))
+                                                   (contra constraint-pathcond)
+                                                   (logicman-pathcond-assume bfr constraint-pathcond)
+                                                   (fgl-interp-value contra)))
              ((when contra)
               (fgl-interp-error
                :msg (fgl-msg "A contradiction has been noted in the ~
@@ -6005,10 +6120,10 @@
           (fgl-interp-add-constraints-for-substs rest interp-st state)))
 
       (define fgl-interp-merge-branches ((testbfr interp-st-bfr-p)
-                                        (thenval fgl-object-p)
-                                        (elseval fgl-object-p)
-                                        (interp-st interp-st-bfrs-ok)
-                                        state)
+                                         (thenval fgl-object-p)
+                                         (elseval fgl-object-p)
+                                         (interp-st interp-st-bfrs-ok)
+                                         state)
         :guard (and (fgl-object-bfrs-ok thenval (interp-st-bfrstate))
                     (fgl-object-bfrs-ok elseval (interp-st-bfrstate)))
         :measure (list (nfix (interp-st->reclimit interp-st))
@@ -6113,10 +6228,10 @@
           (fgl-rewrite-try-rules rules3 fn interp-st state)))
 
       (define fgl-interp-merge-branch-subterms ((testbfr interp-st-bfr-p)
-                                               (thenval fgl-object-p)
-                                               (elseval fgl-object-p)
-                                               (interp-st interp-st-bfrs-ok)
-                                               state)
+                                                (thenval fgl-object-p)
+                                                (elseval fgl-object-p)
+                                                (interp-st interp-st-bfrs-ok)
+                                                state)
         :guard (and (fgl-object-bfrs-ok thenval (interp-st-bfrstate))
                     (fgl-object-bfrs-ok elseval (interp-st-bfrstate)))
         :measure (list (nfix (interp-st->reclimit interp-st))
@@ -6166,10 +6281,10 @@
           (fgl-interp-fncall thenfn args interp-st state)))
 
       (define fgl-interp-merge-branch-args ((testbfr interp-st-bfr-p)
-                                           (thenargs fgl-objectlist-p)
-                                           (elseargs fgl-objectlist-p)
-                                           (interp-st interp-st-bfrs-ok)
-                                           state)
+                                            (thenargs fgl-objectlist-p)
+                                            (elseargs fgl-objectlist-p)
+                                            (interp-st interp-st-bfrs-ok)
+                                            state)
         :guard (and (eql (len thenargs) (len elseargs))
                     (fgl-objectlist-bfrs-ok thenargs (interp-st-bfrstate))
                     (fgl-objectlist-bfrs-ok elseargs (interp-st-bfrstate)))
@@ -6270,9 +6385,9 @@
                                     (cmr::flatten-ev fgl-ev)
                                     (cmr::flatten-ev-list fgl-ev-list))
                                    (x x) (a a)))
-              :in-theory (enable fgl-ev-of-fncall-args
-                                 fgl-ev-of-bad-fncall
-                                 fgl-ev-of-nonsymbol-atom)))))
+                     :in-theory (enable fgl-ev-of-fncall-args
+                                        fgl-ev-of-bad-fncall
+                                        fgl-ev-of-nonsymbol-atom)))))
 
    (define my-by-hint-cp ((clause pseudo-term-listp)
                           (hint)
@@ -6290,7 +6405,7 @@
          (b* ((state (f-put-global 'clause clause state))
               (state (f-put-global 'thm-clause thm-clause state))
               (state (f-put-global 'thm thm state)))
-         (value (list clause)))))
+           (value (list clause)))))
      ///
      (defthm my-by-hint-cp-correct
        (implies (and (pseudo-term-listp clause)
@@ -6310,29 +6425,29 @@
        :rule-classes :clause-processor))))
 
 (local (defun fgl-interp-default-hint
-         #!acl2 (fnname id wait-til-stablep world)
-         (declare (xargs :mode :program))
-         ;; copied mostly from just-expand.lisp, just-expand-mrec-default-hint,
-         ;; added resolve-flags-cp and do-not-induct before expanding
-         #!acl2
-         (and (eql 0 (acl2::access acl2::clause-id id :forcing-round))
-              (equal '(1) (acl2::access acl2::clause-id id :pool-lst))
-              (let* ((fns (acl2::recursivep fnname t world))
-                     (expand-hints (just-expand-cp-parse-hints
-                                    (just-expand-mrec-expanders fns world)
-                                    world)))
-                `(:computed-hint-replacement
-                  ('(:clause-processor (mark-expands-cp clause '(t t ,expand-hints)))
-                   (cmr::call-urewrite-clause-proc)
-                   '(:clause-processor cmr::dumb-flatten-clause-proc)
-                   '(:clause-processor (cmr::let-abstract-lits-clause-proc clause 'xxx))
-                   (and (or (not ',wait-til-stablep) stable-under-simplificationp)
-                        (expand-marked)))
-                  :in-theory (disable . ,fns)
-                  :do-not-induct t
-                  :clause-processor (cmr::resolve-flags-cp
-                                     clause
-                                     ',(cons 'fgl::flag fns)))))))
+           #!acl2 (fnname id wait-til-stablep world)
+           (declare (xargs :mode :program))
+           ;; copied mostly from just-expand.lisp, just-expand-mrec-default-hint,
+           ;; added resolve-flags-cp and do-not-induct before expanding
+           #!acl2
+           (and (eql 0 (acl2::access acl2::clause-id id :forcing-round))
+                (equal '(1) (acl2::access acl2::clause-id id :pool-lst))
+                (let* ((fns (acl2::recursivep fnname t world))
+                       (expand-hints (just-expand-cp-parse-hints
+                                      (just-expand-mrec-expanders fns world)
+                                      world)))
+                  `(:computed-hint-replacement
+                    ('(:clause-processor (mark-expands-cp clause '(t t ,expand-hints)))
+                     (cmr::call-urewrite-clause-proc)
+                     '(:clause-processor cmr::dumb-flatten-clause-proc)
+                     '(:clause-processor (cmr::let-abstract-lits-clause-proc clause 'xxx))
+                     (and (or (not ',wait-til-stablep) stable-under-simplificationp)
+                          (expand-marked)))
+                    :in-theory (disable . ,fns)
+                    :do-not-induct t
+                    :clause-processor (cmr::resolve-flags-cp
+                                       clause
+                                       ',(cons 'fgl::flag fns)))))))
 
 (defsection stack-isomorphic-of-fgl-interp
 
@@ -6345,7 +6460,7 @@
 
   (defret major-stack-scratch-isomorphic-of-relieve-hyp-synp
     (interp-st-scratch-isomorphic new-interp-st
-      interp-st)
+                                  interp-st)
     :hints(("Goal" :in-theory (enable fgl-rewrite-relieve-hyp-synp)))
     :fn fgl-rewrite-relieve-hyp-synp)
 
@@ -6488,9 +6603,10 @@
             (:fnname fgl-rewrite-binder-try-meta)
             (:fnname fgl-rewrite-try-rules3))
         (:add-hyp (scratchobj-case (stack$a-top-scratch (double-rewrite (interp-st->stack interp-st)))
-                    :fgl-objlist))))
+                    :fgl-arglist))))
       :formal-hyps    ;; generates hypotheses
       (((interp-st-bfr-p x)           (lbfr-p x logicman))
+       ((fgl-arglist-p x)             (lbfr-listp (fgl-arglist-bfrlist x) logicman))
        ((fgl-object-p x)              (lbfr-listp (fgl-object-bfrlist x) logicman))
        ((fgl-objectlist-p x)          (lbfr-listp (fgl-objectlist-bfrlist x) logicman))
        ((fgl-object-bindings-p x)     (lbfr-listp (fgl-object-bindings-bfrlist x) logicman))
@@ -6667,8 +6783,8 @@
     :evisc (:gag-mode (evisc-tuple 8 10 nil nil) :term nil)
     (std::defret-mutual-generate <fn>-preserves-pathcond-enabledp
       :rules ((t (:add-concl ;; (implies t ;; (not (fgl-interp-real-errorp err))
-                                      (iff* (nth *pathcond-enabledp* (interp-st->pathcond new-interp-st))
-                                            (nth *pathcond-enabledp* (interp-st->pathcond interp-st))))
+                  (iff* (nth *pathcond-enabledp* (interp-st->pathcond new-interp-st))
+                        (nth *pathcond-enabledp* (interp-st->pathcond interp-st))))
                  (:add-keyword :hints ('(:do-not-induct t :expand :lambdas)
                                        (let ((flag (find-flag-is-hyp clause)))
                                          (and flag
@@ -6755,7 +6871,7 @@
     :evisc (:gag-mode (evisc-tuple 8 10 nil nil) :term nil)
     (std::defret-mutual-generate <fn>-preserves-pathcond-stack-length
       :rules ((t (:add-concl (implies (and ;; (not (fgl-interp-real-errorp err))
-                                           (equal mode (logicman->mode (interp-st->logicman interp-st))))
+                                       (equal mode (logicman->mode (interp-st->logicman interp-st))))
                                       (equal (pathcond-rewind-stack-len
                                               mode
                                               (interp-st->pathcond new-interp-st))
@@ -6845,13 +6961,13 @@
      (implies (and (equal evals (logicman-pathcond-eval-checkpoints! env pathcond logicman))
                    (bind-free
                     ;; (prog2$ (cw "Evals: ~x0~%" evals)
-                            (case-match evals
-                              (('logicman-pathcond-eval-checkpoints! prev-env prev-pathcond prev-logicman)
-                               (and (equal prev-env env)
-                                    (not (equal pathcond prev-pathcond))
-                                    `((prev-pathcond . ,prev-pathcond)
-                                      (prev-logicman . ,prev-logicman))))
-                              (& nil)))
+                    (case-match evals
+                      (('logicman-pathcond-eval-checkpoints! prev-env prev-pathcond prev-logicman)
+                       (and (equal prev-env env)
+                            (not (equal pathcond prev-pathcond))
+                            `((prev-pathcond . ,prev-pathcond)
+                              (prev-logicman . ,prev-logicman))))
+                      (& nil)))
                    ;; (syntaxp (prog2$ (cw "prev-pathcond: ~x0~%prev-logicman: ~x1~%" prev-pathcond prev-logicman)
                    ;;                  t))
                    (equal evals (logicman-pathcond-eval-checkpoints! env prev-pathcond prev-logicman))
@@ -7014,9 +7130,9 @@
                     ((constraint-instancelist-p x) (constraint-instancelist-bfrs-ok x (interp-st-bfrstate))))
       :rules ((t (:add-concl ;;(implies (not (fgl-interp-real-errorp err))
                   (let ((eval (logicman-pathcond-eval
-                                 env
-                                 (interp-st->constraint new-interp-st)
-                                 (interp-st->logicman new-interp-st))))
+                               env
+                               (interp-st->constraint new-interp-st)
+                               (interp-st->logicman new-interp-st))))
                     (iff* eval
                           (and* (logicman-pathcond-eval
                                  env
@@ -7091,9 +7207,9 @@
                                   <call>))))
       :hints ((fgl-interp-default-hint 'fgl-interp-term id nil world)
               (let ((flag (find-flag-is-hyp clause)))
-                                         (and flag
-                                              (prog2$ (cw "flag: ~x0~%" flag)
-                                                      '(:no-op t)))))
+                (and flag
+                     (prog2$ (cw "flag: ~x0~%" flag)
+                             '(:no-op t)))))
       :mutual-recursion fgl-interp)))
 
 (local (in-theory (disable w)))
@@ -7209,19 +7325,19 @@
                     (not (:fnname fgl-rewrite-apply-rule)))
                (:add-concl (stack-equiv-except-top-bindings
                             (fgl-major-stack-concretize (interp-st->stack new-interp-st)
-                                            env
-                                            (interp-st->logicman new-interp-st))
+                                                        env
+                                                        (interp-st->logicman new-interp-st))
                             (fgl-major-stack-concretize (interp-st->stack interp-st)
-                                            env
-                                            (interp-st->logicman interp-st)))))
+                                                        env
+                                                        (interp-st->logicman interp-st)))))
               ((:fnname fgl-interp-bindinglist)
                (:add-concl (stack-equiv-except-top-major/minor-bindings
                             (fgl-major-stack-concretize (interp-st->stack new-interp-st)
-                                            env
-                                            (interp-st->logicman new-interp-st))
+                                                        env
+                                                        (interp-st->logicman new-interp-st))
                             (fgl-major-stack-concretize (interp-st->stack interp-st)
-                                            env
-                                            (interp-st->logicman interp-st)))))
+                                                        env
+                                                        (interp-st->logicman interp-st)))))
               ((or (:fnname fgl-rewrite-binder-fncall)
                    (:fnname fgl-rewrite-binder-try-rules)
                    (:fnname fgl-rewrite-binder-try-rule)
@@ -7234,11 +7350,11 @@
                    (:fnname fgl-rewrite-apply-rule))
                (:add-concl (equal
                             (fgl-major-stack-concretize (interp-st->stack new-interp-st)
-                                            env
-                                            (interp-st->logicman new-interp-st))
+                                                        env
+                                                        (interp-st->logicman new-interp-st))
                             (fgl-major-stack-concretize (interp-st->stack interp-st)
-                                            env
-                                            (interp-st->logicman interp-st)))))
+                                                        env
+                                                        (interp-st->logicman interp-st)))))
               ((or (:fnname fgl-rewrite-try-rules)
                    (:fnname fgl-rewrite-try-rule)
                    (:fnname fgl-rewrite-try-rewrite)
@@ -7543,9 +7659,9 @@
                      (fgl-major-stack-concretize (interp-st->stack interp-st1) env (interp-st->logicman interp-st1))))
                (stack-bindings-extension-p
                 (fgl-major-stack-concretize (interp-st->stack new-interp-st) env
-                                logicman)
+                                            logicman)
                 (fgl-major-stack-concretize (interp-st->stack interp-st1) env
-                                (interp-st->logicman interp-st1))))
+                                            (interp-st->logicman interp-st1))))
       :hints(("Goal" :use stack-bindings-extension-p-of-fgl-rewrite-relieve-hyp-synp-lemma
               :in-theory (disable stack-bindings-extension-p-of-fgl-rewrite-relieve-hyp-synp-lemma)))
       :fn fgl-rewrite-relieve-hyp-synp)
@@ -7623,10 +7739,10 @@
                     (stack-bindings-extension-p
                      (fgl-major-stack-concretize (interp-st->stack new) env logicman)
                      (fgl-major-stack-concretize (interp-st->stack old) env
-                                     (interp-st->logicman old)))
+                                                 (interp-st->logicman old)))
                     (stack-bindings-extension-p
                      (fgl-major-stack-concretize (interp-st->stack old) env
-                                     (interp-st->logicman old))
+                                                 (interp-st->logicman old))
                      older))
                (stack-bindings-extension-p
                 (fgl-major-stack-concretize (interp-st->stack new) env logicman) older))
@@ -7653,17 +7769,17 @@
                     (not (:fnname fgl-rewrite-binder-try-rewrite))
                     (not (:fnname fgl-rewrite-binder-try-meta)))
                (:add-concl (stack-bindings-extension-p
-                              (fgl-major-stack-concretize (interp-st->stack new-interp-st)
-                                              env
-                                              (interp-st->logicman new-interp-st))
-                              (fgl-major-stack-concretize (interp-st->stack interp-st)
-                                              env
-                                              (interp-st->logicman interp-st))))
-                 (:add-keyword :hints ('(:do-not-induct t)
-                                       (let ((flag (find-flag-is-hyp clause)))
-                                         (and flag
-                                              (prog2$ (cw "flag: ~x0~%" flag)
-                                                      '(:no-op t)))))))
+                            (fgl-major-stack-concretize (interp-st->stack new-interp-st)
+                                                        env
+                                                        (interp-st->logicman new-interp-st))
+                            (fgl-major-stack-concretize (interp-st->stack interp-st)
+                                                        env
+                                                        (interp-st->logicman interp-st))))
+               (:add-keyword :hints ('(:do-not-induct t)
+                                     (let ((flag (find-flag-is-hyp clause)))
+                                       (and flag
+                                            (prog2$ (cw "flag: ~x0~%" flag)
+                                                    '(:no-op t)))))))
               ((or (:fnname fgl-rewrite-try-rules)
                    (:fnname fgl-rewrite-try-rule)
                    (:fnname fgl-rewrite-try-rewrite)
@@ -7707,8 +7823,8 @@
                                                                      (interp-st->logicman interp-st)))))
                                       (stack-bindings-extension-p
                                        (fgl-major-stack-concretize (interp-st->stack new-interp-st)
-                                                       env
-                                                       (interp-st->logicman new-interp-st))
+                                                                   env
+                                                                   (interp-st->logicman new-interp-st))
                                        old-stack-ev))))
 
               ((or (:fnname fgl-rewrite-try-rules)
@@ -7900,7 +8016,7 @@
                          (hons-assoc-equal k y))
                     (and (hons-assoc-equal k x)
                          (fgl-object-equiv (cdr (hons-assoc-equal k x))
-                                          (cdr (hons-assoc-equal k y)))))
+                                           (cdr (hons-assoc-equal k y)))))
            :hints(("Goal" :in-theory (enable fgl-bindings-extension-p)
                    :induct t)
                   (and stable-under-simplificationp
@@ -8317,22 +8433,22 @@
                       (fgl-ev-context-fix
                        contexts
                        (fgl-object-eval (g-apply fn args) env (interp-st->logicman interp-st))))))
-  :hints (("Goal" :use ((:instance eval-of-fgl-meta-fncall-stub
-                         (origfn (pseudo-fnsym-fix fn))
-                         (eval-alist bindings3))
-                        (:instance fgl-ev-context-equiv-forall-extensions-necc
-                         (contexts (interp-st->equiv-contexts interp-st))
-                         (obj interp-obj)
-                         (term (mv-nth 1 (fgl-meta-fncall-stub primfn fn args interp-st state)))
-                         (eval-alist bindings3)
-                         (ext bindings3))
-                        (:instance fgl-ev-context-equiv-forall-extensions-necc
-                         (contexts (interp-st->equiv-contexts interp-st))
-                         (obj (fgl-object-eval (g-apply fn args) env (interp-st->logicman interp-st)))
-                         (term (mv-nth 1 (fgl-meta-fncall-stub primfn fn args interp-st state)))
-                         (eval-alist bindings3)
-                         (ext bindings3))
-                        )
+    :hints (("Goal" :use ((:instance eval-of-fgl-meta-fncall-stub
+                           (origfn (pseudo-fnsym-fix fn))
+                           (eval-alist bindings3))
+                          (:instance fgl-ev-context-equiv-forall-extensions-necc
+                           (contexts (interp-st->equiv-contexts interp-st))
+                           (obj interp-obj)
+                           (term (mv-nth 1 (fgl-meta-fncall-stub primfn fn args interp-st state)))
+                           (eval-alist bindings3)
+                           (ext bindings3))
+                          (:instance fgl-ev-context-equiv-forall-extensions-necc
+                           (contexts (interp-st->equiv-contexts interp-st))
+                           (obj (fgl-object-eval (g-apply fn args) env (interp-st->logicman interp-st)))
+                           (term (mv-nth 1 (fgl-meta-fncall-stub primfn fn args interp-st state)))
+                           (eval-alist bindings3)
+                           (ext bindings3))
+                          )
              :in-theory (e/d (fgl-apply acl2::sub-alistp-trans)
                              (eval-of-fgl-meta-fncall-stub
                               fgl-ev-context-equiv-forall-extensions-necc
@@ -8354,8 +8470,8 @@
         (iff-forall-extensions t (conjoin hyps) eval-alist)
         (eval-alist-extension-p eval-alist2 eval-alist)
         (eval-alist-extension-p eval-alist (fgl-object-bindings-eval
-                                              bindings env
-                                              (interp-st->logicman new-interp-st)))
+                                            bindings env
+                                            (interp-st->logicman new-interp-st)))
         (fgl-ev-meta-extract-global-facts :state st)
         (fgl-formula-checks-stub st)
         (equal (w st) (w state))
@@ -8501,17 +8617,17 @@
      ;;          :in-theory (disable fgl-ev-context-equiv-by-eval)))
      :rule-classes :forward-chaining)
 
-  (defthm fgl-interp-equiv-refinementp-implies-context-fix
-    (implies (and (fgl-interp-equiv-refinementp equiv contexts)
-                  (pseudo-fnsym-p equiv)
-                  (fgl-ev (list equiv (pseudo-term-quote lhs)
-                                (pseudo-term-quote rhs))
-                          nil))
-             (equal (fgl-ev-context-fix contexts lhs)
-                    (fgl-ev-context-fix contexts rhs)))
-    :hints(("Goal" :in-theory (e/d (fgl-interp-equiv-refinementp
-                                    fgl-ev-context-fix-equal-by-eval)
-                                   (cmr::pseudo-fnsym-p-when-member-equal-of-equiv-contextsp)))))))
+   (defthm fgl-interp-equiv-refinementp-implies-context-fix
+     (implies (and (fgl-interp-equiv-refinementp equiv contexts)
+                   (pseudo-fnsym-p equiv)
+                   (fgl-ev (list equiv (pseudo-term-quote lhs)
+                                 (pseudo-term-quote rhs))
+                           nil))
+              (equal (fgl-ev-context-fix contexts lhs)
+                     (fgl-ev-context-fix contexts rhs)))
+     :hints(("Goal" :in-theory (e/d (fgl-interp-equiv-refinementp
+                                     fgl-ev-context-fix-equal-by-eval)
+                                    (cmr::pseudo-fnsym-p-when-member-equal-of-equiv-contextsp)))))))
 
 
 (local (acl2::use-trivial-ancestors-check))
@@ -8582,10 +8698,10 @@
   (local (in-theory (enable fgl-ev-context-fix-equal-by-eval)))
 
   (local (defthm member-equiv-contexts-implies-not-quote
-            (implies (member-equal x (equiv-contexts-fix contexts))
-                     (not (equal x 'quote)))
-            :hints(("Goal" :in-theory (enable equiv-contexts-fix)))
-            :rule-classes :forward-chaining))
+           (implies (member-equal x (equiv-contexts-fix contexts))
+                    (not (equal x 'quote)))
+           :hints(("Goal" :in-theory (enable equiv-contexts-fix)))
+           :rule-classes :forward-chaining))
 
 
   (defthm iff-forall-extensions-relieve-hyps-consp
@@ -9036,10 +9152,10 @@
     (implies (and 
               (iff* x-interp-simp-ev x-interp-ev)
               (fgl-ev-context-equiv-forall-extensions
-                   (fgl-interp-test-equiv-contexts contexts)
-                   x-interp-ev-orig
-                   x
-                   (append minor-bindings major-bindings1))
+               (fgl-interp-test-equiv-contexts contexts)
+               x-interp-ev-orig
+               x
+               (append minor-bindings major-bindings1))
               (equal (fgl-ev-context-fix
                       (fgl-interp-test-equiv-contexts contexts)
                       x-interp-ev)
@@ -9262,12 +9378,12 @@
     :hints (("goal" :in-theory (enable eval-alist-extension-p-transitive-append-2))
             (acl2::witness :ruleset context-equiv-forall)))
 
-    (defthm equal-list-forall-extensions-of-empty-args
-      (implies (not (consp args))
-               (equal-list-forall-extensions
-                nil args alist))
-      :hints(("Goal" :in-theory (enable equal-list-forall-extensions))))
-    )
+  (defthm equal-list-forall-extensions-of-empty-args
+    (implies (not (consp args))
+             (equal-list-forall-extensions
+              nil args alist))
+    :hints(("Goal" :in-theory (enable equal-list-forall-extensions))))
+  )
 
 
 
@@ -9313,47 +9429,47 @@
               args
               (append minor major2))))
 
-    (defthm equal?-list-forall-extensions-of-empty-args
-      (implies (not (consp args))
-               (equal?-list-forall-extensions
-                contexts nil args alist)))
+  (defthm equal?-list-forall-extensions-of-empty-args
+    (implies (not (consp args))
+             (equal?-list-forall-extensions
+              contexts nil args alist)))
 
-    (local (defthm sub-alistp-append-when-sub-alistp-append-with-cons
-             (implies (and (not (acl2::sub-alistp (append minor major) ext))
-                           (not (hons-assoc-equal var major)))
-                      (not (acl2::sub-alistp (append minor (cons (cons var val) major)) ext)))
-             :hints(("Goal" :in-theory (enable sub-alistp-by-witness)))))
+  (local (defthm sub-alistp-append-when-sub-alistp-append-with-cons
+           (implies (and (not (acl2::sub-alistp (append minor major) ext))
+                         (not (hons-assoc-equal var major)))
+                    (not (acl2::sub-alistp (append minor (cons (cons var val) major)) ext)))
+           :hints(("Goal" :in-theory (enable sub-alistp-by-witness)))))
 
-    (defthm fgl-ev-context-equiv-forall-extensions-interp-binder
-      (b* (((pseudo-term-fncall form)))
-        (implies (and (pseudo-term-case form :fncall)
-                      (consp form.args)
-                      (pseudo-term-case (car form.args) :var)
-                      (equal free-var (pseudo-term-var->name (car form.args)))
-                      (equal?-list-forall-extensions
-                       (fgl-interp-lambda-arglist-equiv-contexts contexts)
-                       arg-objs
-                       (cdr form.args)
-                       (append minor major1))
-                      (not (hons-assoc-equal free-var major1))
-                      (not (hons-assoc-equal free-var minor))
-                      (equal (fgl-ev-context-fix
-                              contexts
-                              rhs-obj)
-                             (fgl-ev-context-fix
-                              contexts
-                              (fgl-ev (list* form.fn
-                                             (pseudo-term-quote rhs-obj)
-                                             (kwote-lst arg-objs))
-                                      nil))))
-                 (fgl-ev-context-equiv-forall-extensions
-                  contexts
-                  rhs-obj form (append minor (cons (cons free-var rhs-obj) major1)))))
-      :hints(("goal" :in-theory (enable eval-alist-extension-p-transitive-append-2
-                                        fgl-ev-of-fncall-args
-                                        fgl-interp-lambda-arglist-equiv-contexts))
-             (acl2::witness :ruleset context-equiv-forall)))
-    )
+  (defthm fgl-ev-context-equiv-forall-extensions-interp-binder
+    (b* (((pseudo-term-fncall form)))
+      (implies (and (pseudo-term-case form :fncall)
+                    (consp form.args)
+                    (pseudo-term-case (car form.args) :var)
+                    (equal free-var (pseudo-term-var->name (car form.args)))
+                    (equal?-list-forall-extensions
+                     (fgl-interp-lambda-arglist-equiv-contexts contexts)
+                     arg-objs
+                     (cdr form.args)
+                     (append minor major1))
+                    (not (hons-assoc-equal free-var major1))
+                    (not (hons-assoc-equal free-var minor))
+                    (equal (fgl-ev-context-fix
+                            contexts
+                            rhs-obj)
+                           (fgl-ev-context-fix
+                            contexts
+                            (fgl-ev (list* form.fn
+                                           (pseudo-term-quote rhs-obj)
+                                           (kwote-lst arg-objs))
+                                    nil))))
+               (fgl-ev-context-equiv-forall-extensions
+                contexts
+                rhs-obj form (append minor (cons (cons free-var rhs-obj) major1)))))
+    :hints(("goal" :in-theory (enable eval-alist-extension-p-transitive-append-2
+                                      fgl-ev-of-fncall-args
+                                      fgl-interp-lambda-arglist-equiv-contexts))
+           (acl2::witness :ruleset context-equiv-forall)))
+  )
 
 
 
@@ -9376,8 +9492,8 @@
     :witnesses ((ext (equal-bindinglist-forall-extensions-witness
                       obj bindings minor-alist major-alist)))
     :expr (implies (eval-alist-extension-p ext major-alist)
-                     (equal (fgl-ev-bindinglist-minmaj bindings minor-alist ext)
-                            obj))
+                   (equal (fgl-ev-bindinglist-minmaj bindings minor-alist ext)
+                          obj))
     :instance-rulename equal-bindinglist-forall-extensions-instancing
     :wcp-witness-rulename equal-bindinglist-forall-extensions-witnessing)
 
@@ -9529,8 +9645,8 @@
     (b* (((mv bindings body) (lambda-nest-to-bindinglist x)))
       (implies (and (pseudo-term-case x :lambda)
                     (equal?-bindinglist-forall-extensions
-                    (fgl-interp-lambda-arglist-equiv-contexts contexts)
-                    bindings-obj bindings minor-bindings major-bindings1)
+                     (fgl-interp-lambda-arglist-equiv-contexts contexts)
+                     bindings-obj bindings minor-bindings major-bindings1)
                     (fgl-ev-context-equiv-forall-extensions
                      contexts obj
                      body (append bindings-obj major-bindings2))
@@ -9691,7 +9807,7 @@
        :formal-hyps (((interp-st-bfr-p x)           (interp-st-bfr-p x))
                      ((fgl-object-p x)               (fgl-object-bfrs-ok x (interp-st-bfrstate)))
                      ((fgl-objectlist-p x)           (fgl-objectlist-bfrs-ok x (interp-st-bfrstate)))
-                    ((fgl-object-bindings-p x)      (fgl-object-bindings-bfrs-ok x (interp-st-bfrstate)))
+                     ((fgl-object-bindings-p x)      (fgl-object-bindings-bfrs-ok x (interp-st-bfrstate)))
                      (interp-st                     (interp-st-bfrs-ok interp-st))
                      ((constraint-instancelist-p x) (constraint-instancelist-bfrs-ok x (interp-st-bfrstate))))
 
@@ -9703,15 +9819,15 @@
                                                (prog2$ (cw "flag: ~x0~%" flag)
                                                        '(:no-op t)))))))
                ((or (:fnname fgl-rewrite-try-rules)
-                   (:fnname fgl-rewrite-try-rule)
-                   (:fnname fgl-rewrite-try-rewrite)
-                   (:fnname fgl-rewrite-try-meta)
-                   (:fnname fgl-rewrite-binder-try-rules)
-                   (:fnname fgl-rewrite-binder-try-rule)
-                   (:fnname fgl-rewrite-binder-try-rewrite)
-                   (:fnname fgl-rewrite-binder-try-meta)
-                   (:fnname fgl-rewrite-try-rules3))
-               (:add-hyp (scratchobj-case (stack$a-top-scratch (interp-st->stack interp-st)) :fgl-objlist))))
+                    (:fnname fgl-rewrite-try-rule)
+                    (:fnname fgl-rewrite-try-rewrite)
+                    (:fnname fgl-rewrite-try-meta)
+                    (:fnname fgl-rewrite-binder-try-rules)
+                    (:fnname fgl-rewrite-binder-try-rule)
+                    (:fnname fgl-rewrite-binder-try-rewrite)
+                    (:fnname fgl-rewrite-binder-try-meta)
+                    (:fnname fgl-rewrite-try-rules3))
+                (:add-hyp (scratchobj-case (stack$a-top-scratch (interp-st->stack interp-st)) :fgl-objlist))))
 
        :hints ((fgl-interp-default-hint 'fgl-interp-term id nil world))
        :mutual-recursion fgl-interp)))
@@ -9749,7 +9865,7 @@
 
       :rules ((t (:add-concl (iff* (interp-st-bvar-db-ok new-interp-st env)
                                    (and* (interp-st-bvar-db-ok* new-interp-st env)
-                                        (interp-st-bvar-db-ok interp-st env))))
+                                         (interp-st-bvar-db-ok interp-st env))))
                  (:add-keyword :hints ('(:do-not-induct t)
                                        (let ((flag (find-flag-is-hyp clause)))
                                          (and flag
@@ -10035,14 +10151,14 @@
 
 (defret interp-st-try-equivalences-correct-rw
   (implies (and 
-                (logicman-pathcond-eval (fgl-env->bfr-vals env)
-                                        (interp-st->pathcond interp-st)
-                                        (interp-st->logicman interp-st))
-                (interp-st-bvar-db-ok interp-st env)
-                (interp-st-bfrs-ok interp-st)
-                (equal contexts (interp-st->equiv-contexts interp-st))
-                (equal logicman (interp-st->logicman interp-st))
-                (case-split (not (interp-st->errmsg new-interp-st))))
+            (logicman-pathcond-eval (fgl-env->bfr-vals env)
+                                    (interp-st->pathcond interp-st)
+                                    (interp-st->logicman interp-st))
+            (interp-st-bvar-db-ok interp-st env)
+            (interp-st-bfrs-ok interp-st)
+            (equal contexts (interp-st->equiv-contexts interp-st))
+            (equal logicman (interp-st->logicman interp-st))
+            (case-split (not (interp-st->errmsg new-interp-st))))
            (equal (fgl-ev-context-fix
                    contexts
                    (fgl-object-eval xobj env))
@@ -10780,16 +10896,16 @@
              :in-theory (disable interp-st-pathcond-assume-not-contradictionp))))
    
    (defret interp-st->errmsg-equal-unreachable-of-<fn>-special
-      (implies (and (not (equal (interp-st->errmsg interp-st) :unreachable))
-                    (bind-free '((env . (fgl-env->bfr-vals$inline env))) (env))
-                    (logicman-pathcond-eval env (interp-st->pathcond interp-st)
-                                            (interp-st->logicman interp-st))
-                    (logicman-pathcond-eval env (interp-st->constraint interp-st)
-                                            (interp-st->logicman interp-st))
-                    (interp-st-bfrs-ok interp-st))
-               (not (equal (interp-st->errmsg new-interp-st)
-                           :unreachable)))
-      :fn fgl-rewrite-try-primitive)
+     (implies (and (not (equal (interp-st->errmsg interp-st) :unreachable))
+                   (bind-free '((env . (fgl-env->bfr-vals$inline env))) (env))
+                   (logicman-pathcond-eval env (interp-st->pathcond interp-st)
+                                           (interp-st->logicman interp-st))
+                   (logicman-pathcond-eval env (interp-st->constraint interp-st)
+                                           (interp-st->logicman interp-st))
+                   (interp-st-bfrs-ok interp-st))
+              (not (equal (interp-st->errmsg new-interp-st)
+                          :unreachable)))
+     :fn fgl-rewrite-try-primitive)
 
 
    (defthm interp-st->errmsg-equal-unreachable-of-fgl-meta-fncall-stub-special
@@ -11550,12 +11666,12 @@
                                   (fgl-ev-context-fix
                                    (interp-st->equiv-contexts interp-st)
                                    (fgl-ev (cons (pseudo-fnsym-fix fn)
-                                          (kwote-lst
-                                           (cons (fgl-object-eval ans env new-logicman)
-                                                 (fgl-objectlist-eval
-                                                  (interp-st-top-scratch-fgl-objlist interp-st)
-                                                  env logicman))))
-                                    nil))))))
+                                                 (kwote-lst
+                                                  (cons (fgl-object-eval ans env new-logicman)
+                                                        (fgl-objectlist-eval
+                                                         (interp-st-top-scratch-fgl-objlist interp-st)
+                                                         env logicman))))
+                                           nil))))))
 
                 ((:fnname fgl-rewrite-try-rules3)
                  (:add-concl
@@ -11692,8 +11808,8 @@
    ;;              :mutual-recursion fgl-interp)))
    (make-event
     (if (and ;; nil
-             (boundp-global 'fgl-interp-term-subgoals state)
-             (@ fgl-interp-term-subgoals))
+         (boundp-global 'fgl-interp-term-subgoals state)
+         (@ fgl-interp-term-subgoals))
         '(value-triple :skipping-subgoal-generation)
       '(progn
          (make-event
