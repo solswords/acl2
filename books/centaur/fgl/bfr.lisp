@@ -1445,6 +1445,40 @@ bfrstate object.  If no bfrstate object is supplied, the variable named
     :hints(("Goal" :in-theory (enable fgl-object-alist-bfrlist)))))
 
 
+(define fgl-arg-bfrlist ((x fgl-arg-p))
+  :returns (bfrlist true-listp :rule-classes :type-prescription)
+  (fgl-arg-case x
+    :unbound nil
+    :obj (fgl-object-bfrlist x.obj)))
 
+(define fgl-arglist-bfrlist ((x fgl-arglist-p))
+  :returns (bfrlist true-listp :rule-classes :type-prescription)
+  (if (atom x)
+      nil
+    (append (fgl-arg-bfrlist (car x))
+            (fgl-arglist-bfrlist (cdr x)))))
 
+(define fgl-arg-bfrs-ok ((x fgl-arg-p)
+                         &optional ((bfrstate bfrstate-p) 'bfrstate))
+  :returns ok
+  (fgl-arg-case x
+    :unbound t
+    :obj (fgl-object-bfrs-ok x.obj))
+  ///
+  (defret <fn>-in-terms-of-bfrlist
+    (equal ok
+           (bfr-listp (fgl-arg-bfrlist x)))
+    :hints(("Goal" :in-theory (enable fgl-arg-bfrlist)))))
 
+(define fgl-arglist-bfrs-ok ((x fgl-arglist-p)
+                             &optional ((bfrstate bfrstate-p) 'bfrstate))
+  :returns ok
+  (if (atom x)
+      t
+    (and (fgl-arg-bfrs-ok (car x))
+         (fgl-arglist-bfrs-ok (cdr x))))
+  ///
+  (defret <fn>-in-terms-of-bfrlist
+    (equal ok
+           (bfr-listp (fgl-arglist-bfrlist x)))
+    :hints(("Goal" :in-theory (enable fgl-arglist-bfrlist)))))
