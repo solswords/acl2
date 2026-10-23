@@ -55,6 +55,7 @@
                (:fgl-obj (fgl-object-bfrs-ok (stack-nth-scratch-fgl-obj n stack)))
                (:fgl-objlist (fgl-objectlist-bfrs-ok (stack-nth-scratch-fgl-objlist n stack)))
                (:fgl-arglist (fgl-arglist-bfrs-ok (stack-nth-scratch-fgl-arglist n stack)))
+               (:fgl-bindings (fgl-object-bindings-bfrs-ok (stack-nth-scratch-fgl-bindings n stack)))
                (:bfr (bfr-p (stack-nth-scratch-bfr n stack)))
                (:bfrlist (bfr-listp (stack-nth-scratch-bfrlist n stack)))
                (:cinst (constraint-instance-bfrs-ok (stack-nth-scratch-cinst n stack)))

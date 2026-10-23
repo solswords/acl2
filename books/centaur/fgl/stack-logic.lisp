@@ -657,6 +657,7 @@ passed into a function or bound to a different variable in a lambda.</p>
     :fgl-obj (fgl-object-bfrlist x.val)
     :fgl-objlist (fgl-objectlist-bfrlist x.val)
     :fgl-arglist (fgl-arglist-bfrlist x.val)
+    :fgl-bindings (fgl-object-bindings-bfrlist x.val)
     :bfr (list x.val)
     :bfrlist x.val
     :cinst (constraint-instance-bfrlist x.val)
@@ -815,6 +816,7 @@ passed into a function or bound to a different variable in a lambda.</p>
     :fgl-obj (fgl-object-bfrs-ok x.val)
     :fgl-objlist (fgl-objectlist-bfrs-ok x.val)
     :fgl-arglist (fgl-arglist-bfrs-ok x.val)
+    :fgl-bindings (fgl-object-bindings-bfrs-ok x.val)
     :bfr (bfr-p x.val)
     :bfrlist (bfr-listp x.val)
     :cinst (constraint-instance-bfrs-ok x.val)
@@ -829,6 +831,7 @@ passed into a function or bound to a different variable in a lambda.</p>
                                     bfrlist-of-scratchobj-fgl-obj->val
                                     bfrlist-of-scratchobj-fgl-objlist->val
                                     bfrlist-of-scratchobj-fgl-arglist->val
+                                    bfrlist-of-scratchobj-fgl-bindings->val
                                     bfrlist-of-scratchobj-bfr->val
                                     bfrlist-of-scratchobj-cinst->val
                                     bfrlist-of-scratchobj-cinstlist->val))))))

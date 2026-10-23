@@ -106,7 +106,36 @@
 (local (in-theory (disable member-equal
                            equal-of-booleans-rewrite)))
 
+(local (defthm fgl-arglist-unbounds-when-consp
+         (implies (consp x)
+                  (equal (fgl-arglist-unbounds x)
+                         (if (fgl-arg-case (car x) :unbound)
+                             (cons (fgl-arg-unbound->var (car x))
+                                   (fgl-arglist-unbounds (cdr x)))
+                           (fgl-arglist-unbounds (cdr x)))))
+         :hints(("Goal" :in-theory (enable fgl-arglist-unbounds)))))
+
+(local (defthm fgl-arglist-eval-with-rev-subst-when-first-unbound
+         (implies (and (consp x)
+                       (fgl-arg-case (car x) :unbound)
+                       (not (fgl-arglist-unbounds (cdr x))))
+                  (equal (fgl-arglist-eval-with-rev-subst
+                          x rev-alist env)
+                         (cons (cdr (hons-assoc-equal (fgl-arg-unbound->var (car x))
+                                                      rev-alist))
+                               (fgl-objectlist-eval (fgl-arglist->objects (cdr x)) env))))
+         :hints(("Goal" :in-theory (enable fgl-arglist-unbounds
+                                           fgl-arglist-eval-with-rev-subst)))))
+
 (add-fgl-congruence iff-implies-equal-check-true-2)
+
+;; (local (in-theory (disable iff-forall-extensions)))
+
+;; (local (defthm iff-forall-extensions-t
+;;          (iff (iff-forall-extensions t term alist)
+;;               (and (fgl-ev term alist)
+;;                    (hide (iff-forall-extensions t term alist))))
+;;          :hints(("Goal" :expand ((:free (x) (hide x)))))))
 
 (def-fgl-binder-meta check-true-binder
   (b* ((ans

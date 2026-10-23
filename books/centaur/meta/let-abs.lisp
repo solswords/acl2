@@ -1189,6 +1189,114 @@
     :rule-classes :linear))
 
 
+(encapsulate
+  (((letabs-make-varmap * *) => *
+    :formals (subterms avoid-vars)
+    :guard (and (pseudo-term-listp subterms)
+                (pseudo-var-list-p avoid-vars))))
+
+  (local (defun letabs-make-varmap (subterms avoid-vars)
+           (declare (xargs :guard (and (pseudo-term-listp subterms)
+                                       (pseudo-var-list-p avoid-vars))))
+           (pairlis$ (pseudo-term-list-fix subterms)
+                     (b* (((mv new-vars &)
+                           (make-some-vars (len subterms) '__tmp 0 (pseudo-var-list-fix avoid-vars))))
+                       new-vars))))
+
+  (defthm letabs-varmap-p-of-letabs-make-varmap
+    (letabs-varmap-p (letabs-make-varmap subterms avoid-vars)))
+
+  (defthm keys-of-letabs-make-varmap
+    (equal (alist-keys (letabs-make-varmap subterms avoid-vars))
+           (pseudo-term-list-fix subterms)))
+
+  (defthm letabs-make-varmap-avoids-avoid-vars
+    (not (intersectp-equal (alist-vals (letabs-make-varmap subterms avoid-vars))
+                           (pseudo-var-list-fix avoid-vars))))
+
+  (defthm letabs-make-varmap-no-duplicate-vars
+    (no-duplicatesp-equal (alist-vals (letabs-make-varmap subterms avoid-vars)))))
+   
+
+
+
+(define let-abstract-subterms-named ((x pseudo-termp)
+                                     (subterms pseudo-term-listp))
+  :returns (mv (bindinglist bindinglist-p)
+               (new-x pseudo-termp))
+  (b* ((term-vars (term-vars x))
+       (subterms (pseudo-term-list-fix subterms))
+       (varmap (make-fast-alist (letabs-make-varmap subterms term-vars)))
+       ;; (- (cw "varmap: ~x0~%x: ~x1~%" varmap x))
+       ((mv top-level levels) (term-label-letabs-levels x varmap nil))
+       ;; (- (cw "top-level: ~x0~%levels: ~x1~%" top-level levels))
+       (levelmap (fast-alist-clean (letabs-sort-levels levels nil)))
+       (- (fast-alist-free levels))
+       ;; (- (cw "levelmap: ~x0~%" levelmap))
+       ((mv bindinglist partial-varmap)
+        (letabs-abstract-levels (+ 1 top-level) levelmap varmap))
+       (bindinglist (acl2::rev bindinglist))
+       ;; (- (cw "bindinglist: ~x0~%partial-varmap: ~x1~%" bindinglist partial-varmap))
+       (abs-x  (term-let-abstract x partial-varmap))
+       ((acl2::hintcontext :here)))
+    (mv bindinglist abs-x))
+  ///
+
+  (local
+   (defret base-ev-of-term-let-abstract-bind
+     (implies (and (bind-free '((a . a)) (a))
+                   (letabs-env-mapped-vars-ok env a varmap)
+                   (letabs-env-unmapped-vars-ok env a varmap)
+                   (not (intersectp (term-vars x) (alist-vals (letabs-varmap-fix varmap)))))
+              (equal (base-ev new-x env)
+                     (base-ev x a)))
+     :hints (("goal" :use base-ev-of-term-let-abstract))
+     :fn term-let-abstract))
+
+  (set-ignore-ok t)
+
+  (local (defthm intersectp-of-letabs-make-varmap
+           (implies (pseudo-var-list-p avoid-vars)
+                    (not (intersectp-equal avoid-vars (alist-vals (letabs-make-varmap subterms avoid-vars)))))
+           :hints(("Goal" :use ((:instance letabs-make-varmap-avoids-avoid-vars))
+                   :in-theory (e/d (intersectp-commutes)
+                                   (letabs-make-varmap-avoids-avoid-vars))))))
+                                 
+  
+  (defret <fn>-correct
+    (implies (and (no-duplicatesp-equal (pseudo-term-list-fix subterms))
+                  (subsetp-equal (termlist-vars subterms) (term-vars x)))
+             (equal (base-ev new-x
+                             (base-ev-bindinglist bindinglist a))
+                    (base-ev x a)))
+    :hints (("goal" :do-not-induct t)
+            (acl2::function-termhint
+             let-abstract-subterms-named
+             (:here (b* ((env (base-ev-bindinglist bindinglist a)))
+                      `(:use ((:instance not-intersectp-when-not-intersectp-with-superset
+                               (x ,(acl2::hq (term-vars x)))
+                               (y (alist-vals ,(acl2::hq partial-varmap)))
+                               (z (alist-vals ,(acl2::hq varmap))))
+                              (:instance not-intersectp-when-not-intersectp-with-superset
+                               (x (alist-vals ,(acl2::hq varmap)))
+                               (y ,(acl2::hq (termlist-vars subterms)))
+                               (z ,(acl2::hq (term-vars x))))
+                              (:instance subsetp-alist-vals-when-subsetp
+                               (y ,(acl2::hq partial-varmap)) (x ,(acl2::hq varmap)))
+                              (:instance letabs-abstract-levels-partial-varmap-is-subsetp
+                               (full-varmap ,(acl2::hq varmap))
+                               (levelmap ,(Acl2::hq levelmap))
+                               (level ,(acl2::hq (+ 1 top-level)))))
+                        :in-theory (e/d (intersectp-commutes-neg)
+                                        (base-ev-of-term-let-abstract
+                                         letabs-abstract-levels-partial-varmap-is-subsetp
+                                         not-intersectp-when-not-intersectp-with-superset))))))))
+
+  (defret pseudo-term-count-of-<fn>
+    (<= (pseudo-term-count new-x) (pseudo-term-count x))
+    :rule-classes :linear))
+
+
 
 (define let-abstract-term-aux ((x pseudo-termp)
                                (base-var pseudo-var-p)
@@ -1234,7 +1342,40 @@
   (defret let-abstract-term-correct
     (equal (base-ev new-x a)
            (base-ev x a))))
-       
+
+
+
+
+(define let-abstract-term-named ((x pseudo-termp))
+  :returns (new-x pseudo-termp)
+  (b* ((refcounts (fast-alist-clean (term-count-references x nil)))
+       (multiref-terms (collect-multiref-terms refcounts))
+       (- (fast-alist-free refcounts))
+       ((mv bindinglist abs-x)
+        (let-abstract-subterms-named x multiref-terms)))
+    (bindinglist-to-lambda-nest-exec bindinglist abs-x))
+  ///
+  (set-ignore-ok t)
+  
+  (local (defthm termlist-vars-of-alist-keys-of-fast-alist-fork
+           (implies (and (not (member v (termlist-vars (alist-keys x))))
+                         (not (member v (termlist-vars (alist-keys y)))))
+                    (not (member v (termlist-vars (alist-keys (fast-alist-fork x y))))))
+           :hints(("Goal" :in-theory (enable fast-alist-fork alist-keys termlist-vars)))))
+
+  (local (defthm termlist-vars-of-alist-keys-of-fast-alist-clean
+           (implies (not (member v (termlist-vars (alist-keys x))))
+                    (not (member v (termlist-vars (alist-keys (fast-alist-clean x))))))
+           :hints(("Goal" :in-theory (enable fast-alist-clean)))))
+
+  (local (defthm subsetp-multiref-terms
+           (subsetp (termlist-vars (collect-multiref-terms (fast-alist-clean (term-count-references x nil))))
+                    (term-vars x))
+           :hints(("Goal" :in-theory (enable acl2::subsetp-witness-rw)))))
+
+  (defret let-abstract-term-named-correct
+    (equal (base-ev new-x a)
+           (base-ev x a))))
 
 
 

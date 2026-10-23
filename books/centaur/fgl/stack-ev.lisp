@@ -71,6 +71,32 @@
 
   (defcong logicman-equiv equal (fgl-objectlist-concretize x env logicman) 3))
 
+(define fgl-arglist-concretize ((x fgl-arglist-p)
+                      (env fgl-env-p)
+                      &optional (logicman 'logicman))
+  :guard (lbfr-listp (fgl-arglist-bfrlist x))
+  :guard-hints (("goal" :in-theory (enable fgl-arglist-bfrlist
+                                           fgl-arg-bfrlist)))
+  :returns (new-x fgl-arglist-p)
+  (if (atom x)
+      nil
+    (cons (b* ((x1 (car x)))
+            (fgl-arg-case x1
+              :unbound (fgl-arg-fix x1)
+              :obj (fgl-arg-obj (fgl-object-concretize x1.obj env))))
+          (fgl-arglist-concretize (cdr x) env)))
+  ///
+
+  (defthm fgl-arglist-concretize-of-logicman-extension
+    (implies (and (bind-logicman-extension new old)
+                  (lbfr-listp (fgl-arglist-bfrlist x) old))
+             (equal (fgl-arglist-concretize x env new)
+                    (fgl-arglist-concretize x env old)))
+    :hints(("Goal" :in-theory (enable fgl-arglist-bfrlist
+                                      fgl-arg-bfrlist))))
+
+  (defcong logicman-equiv equal (fgl-arglist-concretize x env logicman) 3))
+
 (define fgl-object-alist-concretize ((x fgl-object-alist-p)
                       (env fgl-env-p)
                       &optional (logicman 'logicman))
@@ -187,6 +213,8 @@
   (scratchobj-case x
     :fgl-obj (scratchobj-fgl-obj (fgl-object-concretize x.val env))
     :fgl-objlist (scratchobj-fgl-objlist (fgl-objectlist-concretize x.val env))
+    :fgl-arglist (scratchobj-fgl-arglist (fgl-arglist-concretize x.val env))
+    :fgl-bindings (scratchobj-fgl-bindings (fgl-object-bindings-concretize x.val env))
     :bfr (scratchobj-bfr (gobj-bfr-eval x.val env))
     :bfrlist (scratchobj-bfrlist (gobj-bfr-list-eval x.val env))
     :cinst (scratchobj-cinst (fgl-constraint-instance-concretize x.val env))
@@ -208,6 +236,14 @@
   (defthm fgl-scratchobj-concretize-of-scratchobj-fgl-objlist
     (equal (fgl-scratchobj-concretize (Scratchobj-fgl-objlist val) env)
            (scratchobj-fgl-objlist (fgl-objectlist-concretize val env))))
+
+  (defthm fgl-scratchobj-concretize-of-scratchobj-fgl-arglist
+    (equal (fgl-scratchobj-concretize (Scratchobj-fgl-arglist val) env)
+           (scratchobj-fgl-arglist (fgl-arglist-concretize val env))))
+
+  (defthm fgl-scratchobj-concretize-of-scratchobj-fgl-bindings
+    (equal (fgl-scratchobj-concretize (Scratchobj-fgl-bindings val) env)
+           (scratchobj-fgl-bindings (fgl-object-bindings-concretize val env))))
 
   (defthm fgl-scratchobj-concretize-of-scratchobj-bfr
     (equal (fgl-scratchobj-concretize (Scratchobj-bfr val) env)
@@ -438,6 +474,11 @@
     (equal (fgl-objectlist-concretize (fgl-objectlist-concretize x env) env2 logicman2)
            (fgl-objectlist-concretize x env))
     :hints(("Goal" :in-theory (enable fgl-objectlist-concretize))))
+
+  (defthm fgl-arglist-concretize-identity
+    (equal (fgl-arglist-concretize (fgl-arglist-concretize x env) env2 logicman2)
+           (fgl-arglist-concretize x env))
+    :hints(("Goal" :in-theory (enable fgl-arglist-concretize))))
 
   (defthm bfr-eval-of-boolean
     (implies (booleanp x)
