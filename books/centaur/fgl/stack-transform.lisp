@@ -76,6 +76,43 @@
   :fn fgl-object-alist-map-bfrs)
 
 
+(define fgl-arglist-map-bfrs ((x fgl-arglist-p)
+                               litarr
+                               (memo fgl-object-map-bfrs-memo-p))
+  :guard (and (< 0 (lits-length litarr))
+              (bfr-listp (fgl-arglist-bfrlist x)
+                         (bfrstate (bfrmode :aignet) (1- (lits-length litarr)))))
+  :prepwork ((local (in-theory (enable fgl-arglist-bfrlist fgl-arg-bfrlist))))
+  :returns (mv (new-x fgl-arglist-p)
+               (new-memo fgl-object-map-bfrs-memo-p))
+  (b* (((when (atom x)) (mv nil (fgl-object-map-bfrs-memo-fix memo litarr)))
+       (arg (car x))
+       ((mv arg memo)
+        (fgl-arg-case arg
+          :unbound (mv (fgl-arg-fix arg) (fgl-object-map-bfrs-memo-fix memo litarr))
+          :obj (b* (((mv obj memo) (fgl-object-map-bfrs-memo arg.obj litarr memo)))
+                 (mv (fgl-arg-obj obj) memo))))
+       ((mv rest memo) (fgl-arglist-map-bfrs (cdr x) litarr memo)))
+    (mv (cons arg rest) memo))
+  ///
+  (defret len-of-<fn>
+    (equal (len new-x) (len x)))
+
+  (defret bfr-listp-of-<fn>
+    (implies (and (bfr-litarr-p (fgl-arglist-bfrlist x) litarr
+                                (bfrstate->bound bfrstate))
+                  (equal (bfrstate->mode bfrstate) (bfrmode :aignet)))
+             (bfr-listp (fgl-arglist-bfrlist new-x) bfrstate)))
+
+  (defret concretize-of-<fn>
+    (implies (bfr-litarr-correct-p (fgl-arglist-bfrlist x)
+                                   (fgl-env->bfr-vals env)
+                                   litarr logicman2 logicman)
+             (equal (fgl-arglist-concretize new-x env logicman2)
+                    (fgl-arglist-concretize x env logicman)))
+    :hints (("Goal" :in-theory (enable fgl-arglist-concretize)))))
+
+
 (define fgl-object-bindings-map-bfrs ((x fgl-object-bindings-p)
                                      litarr
                                      (memo fgl-object-map-bfrs-memo-p))
@@ -122,6 +159,15 @@
                (new-memo fgl-object-map-bfrs-memo-p))
   (fgl-object-alist-map-bfrs-memo (fgl-object-bindings-fix x) litarr memo)
   ///
+  (defret alist-keys-of-<fn>
+    (equal (alist-keys new-x)
+           (alist-keys (fgl-object-bindings-fix x)))
+    :hints (("Goal" :in-theory (enable fgl-object-bindings-map-bfrs
+                                       fgl-object-alist-map-bfrs
+                                       fgl-object-bindings-fix
+                                       alist-keys)
+                    :induct (fgl-object-bindings-fix x))))
+
   (defret bfr-listp-of-<fn>
     (implies (and (bfr-litarr-p (fgl-object-bindings-bfrlist x) litarr
                                 (bfrstate->bound bfrstate))
@@ -223,6 +269,8 @@
   :prepwork ((local (in-theory (e/d (scratchobj->bfrlist)
                                     (bfrlist-of-scratchobj-fgl-obj->val
                                      bfrlist-of-scratchobj-fgl-objlist->val
+                                     bfrlist-of-scratchobj-fgl-arglist->val
+                                     bfrlist-of-scratchobj-fgl-bindings->val
                                      bfrlist-of-scratchobj-bfr->val
                                      bfrlist-of-scratchobj-bfrlist->val
                                      bfrlist-of-scratchobj-cinst->val
@@ -232,6 +280,10 @@
               (mv (scratchobj-fgl-obj ans) memo))
     :fgl-objlist (b* (((mv ans memo) (fgl-objectlist-map-bfrs-memo x.val litarr memo)))
                   (mv (scratchobj-fgl-objlist ans) memo))
+    :fgl-arglist (b* (((mv ans memo) (fgl-arglist-map-bfrs x.val litarr memo)))
+                  (mv (scratchobj-fgl-arglist ans) memo))
+    :fgl-bindings (b* (((mv ans memo) (fgl-object-bindings-map-bfrs x.val litarr memo)))
+                   (mv (scratchobj-fgl-bindings ans) memo))
     :bfr (mv (scratchobj-bfr (bfr-map x.val litarr)) (fgl-object-map-bfrs-memo-fix memo))
     :bfrlist (mv (scratchobj-bfrlist (bfrlist-map x.val litarr)) (fgl-object-map-bfrs-memo-fix memo))
     :cinst (b* (((mv ans memo) (constraint-instance-map-bfrs x.val litarr memo)))

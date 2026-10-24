@@ -203,8 +203,8 @@ from this REPL, including variables bound in the rule being applied.</p>
                             restore-rules
                             (interp-st interp-st-bfrs-ok)
                             state)
-  (b* (((unless (fgl-generic-rune-p rune))
-        (mv "Rune must satisfy fgl-generic-rune-p" nil interp-st state))
+  (b* (((unless (fgl-rune-p rune))
+        (mv "Rune must satisfy fgl-rune-p" nil interp-st state))
        ((mv err entry interp-st state)
         (fgl-trace-entry-fancy-translate
          keyvals
@@ -254,8 +254,8 @@ syntax-interp), @(see syntax-bind), syntaxp, and bind-free forms.</p>")
 
 
 (define fgl-untrace*-fn (rune &key (interp-st 'interp-st))
-  (b* (((unless (fgl-generic-rune-p rune))
-        (mv "Rune must satisfy fgl-generic-rune-p" nil interp-st))
+  (b* (((unless (fgl-rune-p rune))
+        (mv "Rune must satisfy fgl-rune-p" nil interp-st))
        (old-alist (interp-st->trace-alist interp-st))
        (interp-st (update-interp-st->trace-alist
                    (remove-assoc-equal rune old-alist) interp-st)))

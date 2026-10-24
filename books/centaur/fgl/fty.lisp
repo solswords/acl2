@@ -32,7 +32,7 @@
 
 (include-book "def-fgl-rewrite")
 (include-book "centaur/fty/database" :dir :system)
-
+(include-book "clause-processors/generalize" :dir :system) ;; for new-symbol
 
 (defxdoc fgl-fty-support
   :parents (fgl::fgl)

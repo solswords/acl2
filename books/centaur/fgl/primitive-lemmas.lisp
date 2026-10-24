@@ -31,6 +31,7 @@
 (in-package "FGL")
 
 (include-book "logicman")
+(include-book "unify-defs")
 (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
 (local (std::add-default-post-define-hook :fix))
 
@@ -41,9 +42,39 @@
                         (fgl-objectlist-eval (cdr x) env))))
   :hints(("Goal" :in-theory (enable fgl-objectlist-eval))))
 
+(defthm fgl-arglist->objects-when-consp
+  (implies (consp x)
+           (equal (fgl-arglist->objects x)
+                  (cons (fgl-arg-obj->obj (car x))
+                        (fgl-arglist->objects (cdr x)))))
+  :hints(("Goal" :in-theory (enable fgl-arglist->objects))))
+
+(defthm fgl-arglist->objects-when-atom
+  (implies (not (consp x))
+           (equal (fgl-arglist->objects x) nil))
+  :hints(("Goal" :in-theory (enable fgl-arglist->objects))))
+
 
 (in-theory (enable fgl-objectlist-bfrlist-when-consp))
 
+(defthm fgl-arglist-bfrlist-when-consp
+  (implies (consp x)
+           (equal (fgl-arglist-bfrlist x)
+                  
+                  (append (and (fgl-arg-case (car x) :obj)
+                               (fgl-object-bfrlist (fgl-arg-obj->obj (car x))))
+                          (fgl-arglist-bfrlist (cdr x)))))
+  :hints(("Goal" :in-theory (enable fgl-arglist-bfrlist
+                                    fgl-arg-bfrlist))))
+
+(defthm fgl-arglist-unbounds-when-consp
+  (implies (consp x)
+           (equal (fgl-arglist-unbounds x)
+                  (if (fgl-arg-case (car x) :unbound)
+                      (cons (fgl-arg-unbound->var (car x))
+                            (fgl-arglist-unbounds (cdr x)))
+                    (fgl-arglist-unbounds (cdr x)))))
+  :hints(("Goal" :in-theory (enable fgl-arglist-unbounds))))
 
 
 (in-theory (enable fgl-objectlist-bfrlist-when-consp))

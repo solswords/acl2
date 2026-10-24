@@ -504,7 +504,7 @@
                         ;; (<= i (stack$c-top-frame stack$c))
                         )
                    (and (fgl-object-bindings-p (nth (* 3 i) (nth *stack$c-majori* stack$c)))
-                        (maybe-fgl-generic-rule-p (nth (+ 1 (* 3 i)) (nth *stack$c-majori* stack$c)))
+                        (maybe-fgl-rule-p (nth (+ 1 (* 3 i)) (nth *stack$c-majori* stack$c)))
                         (acl2::maybe-natp (nth (+ 2 (* 3 i)) (nth *stack$c-majori* stack$c))))))
   :rewrite :direct)
 
@@ -517,7 +517,7 @@
  (defthm stack$c-major-frames-welltyped-zero
    (implies (stack$c-major-frames-welltyped stack$c)
             (and (fgl-object-bindings-p (nth 0 (nth *stack$c-majori* stack$c)))
-                 (maybe-fgl-generic-rule-p (nth 1 (nth *stack$c-majori* stack$c)))
+                 (maybe-fgl-rule-p (nth 1 (nth *stack$c-majori* stack$c)))
                  (acl2::maybe-natp (nth 2 (nth *stack$c-majori* stack$c)))))
    :hints (("goal" :use ((:instance stack$c-major-frames-welltyped-necc (i 0)))))))
 
@@ -2809,11 +2809,11 @@
 ;;                   (not (equal (* 2 x) (+ 1 (* 2 y)))))
 ;;          :hints (("Goal" :use ((:theorem (implies (equal (* 2 x) (+ 1 (* 2 y))) (equal (fix x) (+ 1/2 (fix y))))))))))
 
-(define stack$c-set-rule ((rule maybe-fgl-generic-rule-p)
+(define stack$c-set-rule ((rule maybe-fgl-rule-p)
                           (stack$c stack$c-okp))
   :returns new-stack$c
   (b* ((top-major (stack$c-top-frame stack$c)))
-    (update-stack$c-majori (+ 1 (* 3 top-major)) (maybe-fgl-generic-rule-fix rule) stack$c))
+    (update-stack$c-majori (+ 1 (* 3 top-major)) (maybe-fgl-rule-fix rule) stack$c))
   ///
   
   (defret stack$c-okp-of-<fn>
@@ -3085,7 +3085,7 @@
                                         (stack$c-major-frames-welltyped-necc))
                  :use ((:instance stack$c-major-frames-welltyped-necc
                         (i (nfix (- (stack$c-top-frame stack$c) (nfix n))))))))
-  (maybe-fgl-generic-rule-fix
+  (maybe-fgl-rule-fix
     (stack$c-majori (+ 1 (* 3 (mbe :logic (nfix (- (stack$c-top-frame stack$c) (nfix n)))
                                    :exec (- (stack$c-top-frame stack$c) n))))
                     stack$c))
@@ -3239,7 +3239,7 @@
 
 
 (define stack$c-rule ((stack$c stack$c-okp))
-  (maybe-fgl-generic-rule-fix (stack$c-majori (+ 1 (* 3 (stack$c-top-frame stack$c))) stack$c))
+  (maybe-fgl-rule-fix (stack$c-majori (+ 1 (* 3 (stack$c-top-frame stack$c))) stack$c))
   ///
   (defthm stack$a-rule-of-stack$c-extract
     (equal (stack$a-rule (stack$c-extract stack$c))

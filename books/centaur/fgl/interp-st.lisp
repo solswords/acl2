@@ -140,7 +140,7 @@
                             (mv bitarr bvar-db env$))
                           reference-ctrex))))
 
-(fty::defmap trace-alist :key-type fgl-generic-rune :val-type true-listp :true-listp t :keyp-of-nil nil)
+(fty::defmap trace-alist :key-type fgl-rune :val-type true-listp :true-listp t :keyp-of-nil nil)
 (fty::deflist trace-alistlist :elt-type trace-alist :true-listp t :elementp-of-nil t)
 
 (with-output
@@ -170,7 +170,6 @@
              :fix interp-flags-fix :pred interp-flags-p)
 
       (rewrite-rules :type (satisfies alistp) :initially nil :fix acl2::alist-fix)
-      (binder-rules :type (satisfies alistp) :initially nil :fix acl2::alist-fix)
       (branch-merge-rules :type (satisfies alistp) :initially nil :fix acl2::alist-fix)
       (congruence-rules :type (satisfies true-listp) :initially nil :fix acl2::true-list-fix)
       (id-congruence-rules :type (satisfies true-listp) :initially nil :fix acl2::true-list-fix)
@@ -263,7 +262,6 @@
                              (interp-st (update-interp-st->config (make-fgl-config) interp-st))
                              (interp-st (update-interp-st->flags (make-interp-flags) interp-st))
                              (interp-st (update-interp-st->rewrite-rules nil interp-st))
-                             (interp-st (update-interp-st->binder-rules nil interp-st))
                              (interp-st (update-interp-st->branch-merge-rules nil interp-st))
                              (interp-st (update-interp-st->congruence-rules nil interp-st))
                              (interp-st (update-interp-st->id-congruence-rules nil interp-st))
@@ -647,7 +645,7 @@
                (stack-set-minor-bindings bindings stack))
              interp-st))
 
-(define interp-st-set-rule ((rule maybe-fgl-generic-rule-p) interp-st)
+(define interp-st-set-rule ((rule maybe-fgl-rule-p) interp-st)
   :enabled t :hooks nil
   :inline t
   (stobj-let ((stack (interp-st->stack interp-st)))

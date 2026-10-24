@@ -921,7 +921,6 @@ objects, and many other complications.</p>"
                  (:debug-info     . t)
                  (:debug-stack    . (major-stack-p debug-stack))
                  (:rewrite-rules  . (alistp rewrite-rules))
-                 (:binder-rules   . (alistp binder-rules))
                  (:branch-merge-rules . (alistp branch-merge-rules))
                  (:congruence-rules . (true-listp congruence-rules))
                  (:id-congruence-rules . (true-listp id-congruence-rules))))))

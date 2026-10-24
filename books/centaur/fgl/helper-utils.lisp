@@ -561,7 +561,7 @@ keyword argument. Examples of usage:</p>
 
 (define major-frame->debug ((x major-frame-p))
   (b* (((major-frame x)))
-    (list :rule (and x.rule (fgl-generic-rule->rune x.rule))
+    (list :rule (and x.rule (fgl-rule->rune x.rule))
           :phase x.phase
           :minor-frames (minor-stack->debugframes x.minor-stack))))
 
