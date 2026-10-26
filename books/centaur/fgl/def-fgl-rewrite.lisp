@@ -919,10 +919,12 @@ rewrite rule that is only used inside FGL:</p>
     :hints ...)
 })
 
+<!-- FGL-DOC-UPDATE-BEGIN: fgl-rule-enabled-status -->
 <p>This defines a disabled ACL2 rewrite rule called my-rewrite-rule, and adds
 my-rewrite-rule to the table of rules FGL is allowed to use. (FGL will still use
 it even though it is disabled, as long as it is in that table.)</p>
 
+<!-- FGL-DOC-UPDATE-END: fgl-rule-enabled-status -->
 <p>The optional @(':arg-modes') list specifies whether each direct LHS
 argument must be bound (@(':bound')), may be either form (@(':either')), or
 must be an unbound variable (@(':unbound')).  Omitted positions are

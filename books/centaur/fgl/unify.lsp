@@ -1271,12 +1271,14 @@
 
 (ifndef "DEFS_ONLY"
 
+;; FGL-DOC-UPDATE-BEGIN: unifier-arglist-correctness
         ;; Eventual property of masked unification:
         ;; - For any extension of the unifying substitution, the evaluation of the pattern \ substitution equals
         ;; the application of the function to the arguments formed by interleaving (according to the holes mask)
         ;; the evaluations of the non-hole arguments with the lookups of the hole variables
         ;; in the reverse substitution evaluated under the evaluation of the extended unifying substitution.
 
+;; FGL-DOC-UPDATE-END: unifier-arglist-correctness
         (defret <fn>-keys-of-rev-subst
           (implies flag
                    (set-equiv (alist-keys new-subst)

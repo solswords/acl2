@@ -96,23 +96,6 @@
                               (mv vars bitarr)))
                  (mv vars bitarr))
       vars)))
-                       
-                 
-(local (defthm fgl-ev-context-equv-forall-extensions-trivial
-         (implies (acl2::rewriting-negative-literal
-                   `(fgl-ev-context-equiv-forall-extensions ,contexts ,obj ,term ,eval-alist))
-                  (iff (fgl-ev-context-equiv-forall-extensions contexts obj term eval-alist)
-                       (and 
-                        (equal (fgl-ev-context-fix contexts (fgl-ev term eval-alist))
-                               (fgl-ev-context-fix contexts obj))
-                        (hide (fgl-ev-context-equiv-forall-extensions contexts obj term eval-alist)))))
-         :hints (("goal" :expand ((:free (x) (hide x)))
-                  :use ((:instance fgl-ev-context-equiv-forall-extensions-necc
-                         (ext eval-alist)))
-                  :in-theory (disable fgl-ev-context-equiv-forall-extensions-necc)))))
-
-(local (in-theory (disable fgl-ev-context-equiv-forall-extensions)))
-
 
 (def-fgl-binder-meta gatecount-binder
   (b* (((unless (bfr-mode-is :aignet (interp-st-bfr-mode)))

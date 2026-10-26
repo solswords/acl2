@@ -229,6 +229,7 @@ works (depending what rules are installed):</p>
 
 ")
 
+;; FGL-DOC-UPDATE-BEGIN: binding-correctness
 (defxdoc fgl-correctness-of-binding-free-variables
   :parents (fgl)
   :short "Discussion of the logical justification for the @(see bind-var) feature."
@@ -450,6 +451,7 @@ bindings resulting from rewriting the second term.</p>")
 
 ;; ")
 
+;; FGL-DOC-UPDATE-END: binding-correctness
 (defxdoc fgl-interpreter-overview
   :parents (fgl)
   :short "Outline of the way the FGL interpreter works."
@@ -515,6 +517,7 @@ resulting from the arguments.</li>
 
 </ul>
 
+<!-- FGL-DOC-UPDATE-BEGIN: interpreter-special-cases -->
 <h3>Interpreting Function Calls -- Special Cases</h3>
 
 <p>The special cases of function calls include @('if'), @('return-last'),
@@ -610,6 +613,8 @@ that term and return its result.</li>
 
 </ul>
 
+<!-- FGL-DOC-UPDATE-END: interpreter-special-cases -->
+<!-- FGL-DOC-UPDATE-BEGIN: interpreter-generic-calls -->
 <h3>Interpreting Function Calls -- Generic Case</h3>
 
 <p>Generic function calls are run by @('fgl-interp-fncall') after reducing the
@@ -653,6 +658,8 @@ test.  This will also lead us to discuss @('fgl-interp-add-constraints'), which
 adds Boolean constraints according to a set of rules activated when introducing
 a new Boolean variable representing some term.</p>
 
+<!-- FGL-DOC-UPDATE-END: interpreter-generic-calls -->
+<!-- FGL-DOC-UPDATE-BEGIN: interpreter-rule-application -->
 <h3>Applying Rewrite Rules</h3>
 
 <p>@('fgl-rewrite-try-rule') takes a rule, a function name, and a list of
@@ -686,6 +693,7 @@ bound.  Binder rules also specify the equivalence context under which the RHS
 must be rewritten.</p>
 
 
+<!-- FGL-DOC-UPDATE-END: interpreter-rule-application -->
 <h3>Simplifying IF Tests</h3>
 
 <p>@('fgl-interp-simplify-if-test') takes a symbolic object and attempts to
@@ -854,6 +862,7 @@ it to be reinitialized).</li>
 
 ")
 
+;; FGL-DOC-UPDATE-BEGIN: binder-rule-semantics
 (defxdoc binder-rules
   :parents (fgl-rewrite-rules)
   :short "Determining free variable bindings using rewriting"
@@ -894,6 +903,7 @@ the @('binder-function') call with that same result.</li>
 
 ")
 
+;; FGL-DOC-UPDATE-END: binder-rule-semantics
 (defxdoc binder-functions
   :parents (fgl-rewrite-rules)
   :short "Functions that describe constraints on bindings for free variables."
@@ -927,6 +937,7 @@ bound to @('(+ 1 x)'):</p>
                    free-var)))
  })
 
+<!-- FGL-DOC-UPDATE-BEGIN: binder-example-hypotheses -->
 <p>When interpreted as a <see topic='@(url binder-rules)'>binder rule</see>, this
 has no hypotheses (so it can apply whenever bind-var is called on a free
 variable and an argument that unifies with @('(foo x)')), and it rewrites to
@@ -934,6 +945,7 @@ variable and an argument that unifies with @('(foo x)')), and it rewrites to
 the object resulting from rewriting @('(+ 1 x)') and this same object will be
 returned from the @('bind-var') form.</p>
 
+<!-- FGL-DOC-UPDATE-END: binder-example-hypotheses -->
 <p>A slightly less simple example: @('check-equal') is a binder function that
 is Boolean-valued and may only return T if its second and third arguments are equal:</p>
 @({
@@ -1061,6 +1073,7 @@ if-then-else branch.  These rules can be added using
 then else)') where @('then') is a function call.  Generally, @('test') and
 @('else') should be free variables, but this isn't a hard and fast rule.</p>
 
+<!-- FGL-DOC-UPDATE-BEGIN: generalized-free-variable-binding -->
 <h3>Binding Free Variables</h3>
 
 <p>There are several ways in which variables not present in the LHS of the rule
@@ -1094,6 +1107,7 @@ current variable bindings.</li>
 
 </ul>
 
+<!-- FGL-DOC-UPDATE-END: generalized-free-variable-binding -->
 <h3>Advanced Features</h3>
 
 <p>Two additional features support a new style of programming rewrite rules.
@@ -1637,6 +1651,7 @@ other rules, happen during a top-level attempted application of the rule.</p>
   :short "Adding fast-executing primitive routines to FGL."
   :long "
 
+<!-- FGL-DOC-UPDATE-BEGIN: metafunction-interface-and-dispatch -->
 <p>FGL is geared toward doing most reasoning via rewrite rules.  But sometimes
 rewrite rules aren't fast enough or are otherwise inadequate for something we
 want to do.  For these cases, FGL supports two kinds of custom reasoning
@@ -1671,6 +1686,7 @@ creates a similar dispatcher function for primitives and another one for binder
 meta rules (see @(see binder)).</p>
 
 
+<!-- FGL-DOC-UPDATE-END: metafunction-interface-and-dispatch -->
 <h3>Example</h3>
 
 <p>The primitive for @('intcar'), which returns the least-significant bit of

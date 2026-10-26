@@ -4438,12 +4438,6 @@
                                   (third args)
                                   interp-st state))
 
-          ;; ((bind-var 2)
-          ;;  (fgl-interp-bind-var (first args) (second args) interp-st state))
-
-          ;; ((binder 1)
-          ;;  (fgl-interp-binder (first args) interp-st state))
-
           ((abort-rewrite 1)
            (b* ((interp-st (interp-st-incr-term-index (fgl-minor-frame-subterm-count (first args)) interp-st))
                 (interp-st (interp-st-set-error :abort-rewrite interp-st)))
@@ -4950,8 +4944,6 @@
                            (pseudo-term-case rule.lhs :fncall)))
               (fgl-interp-value nil nil))
              (args (interp-st-top-scratch-fgl-arglist interp-st))
-             ((unless (fgl-rule-arg-modes-allow-args-p rule.arg-modes args))
-              (fgl-interp-value nil nil))
              ;; (rule.lhs.args (pseudo-term-call->args rule.lhs))
              ((mv unify-ok bindings rev-subst)
               (fgl-unify-term/gobj-fn/args-masked

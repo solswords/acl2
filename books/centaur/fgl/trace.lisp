@@ -139,7 +139,7 @@
   '`((depth . ,(lnfix depth))
      (rune . ,(fgl-rune-fix rune))
      (fn . ,(pseudo-fnsym-fix fn))
-     (args . ,(fgl-objectlist-fix args))
+     (args . ,(fgl-arglist-fix args))
      (bindings . ,(fgl-object-bindings-fix bindings))
      . ,(fgl-object-bindings-fix bindings)))
 
@@ -206,10 +206,10 @@
 ;;   :push t)
 
 (define interp-st-rewrite-args (interp-st)
-  :returns (args fgl-objectlist-p)
+  :returns (args fgl-arglist-p)
   (and (< 0 (interp-st-scratch-len interp-st))
        (let ((scratch (interp-st-top-scratch interp-st)))
-         (scratchobj-case scratch :fgl-objlist scratch.val :otherwise nil))))
+         (scratchobj-case scratch :fgl-arglist scratch.val :otherwise nil))))
 
 (local (acl2::use-trivial-ancestors-check))
 
@@ -364,63 +364,6 @@
     (make-event `(progn . ,*fancy-ev-primitive-thms*))))
 
 
-;; Meta rules: five trace events -- entry (shared with rewriting), eval
-;; success, eval failure, (RHS rewriting) success, (RHS rewriting) failure.
-(def-trace-output fgl-trace-meta-eval-success-output ((rhs pseudo-termp))
-  :key :on-eval-success
-  :ev-bindings (`(rhs . ,(pseudo-term-fix rhs)))
-  :description "trace eval-success term")
-
-
-
-(def-trace-output fgl-trace-meta-eval-failure-output ()
-  :key :on-eval-failure
-  :ev-bindings (`(errmsg . ,(interp-st->errmsg interp-st)))
-  :description "trace eval-failure term"
-  :default (msg "~x0 evaluation failed~@1~%"
-                rune
-                (let ((errmsg (interp-st->errmsg interp-st)))
-                  (cond ((msgp errmsg) (msg " with error ~@0" errmsg))
-                        (errmsg (msg " with error ~x0" errmsg))
-                        (t ""))))
-  :direction :exit)
-
-(def-trace-output fgl-trace-meta-success-output ((result fgl-object-p)
-                                                 (rhs pseudo-termp))
-  :key :on-success
-  :ev-bindings (`(result . ,(fgl-object-fix result))
-                `(rhs . ,(pseudo-term-fix rhs)))
-  :description "trace success term"
-  :default (msg "~x0 success: ~x1~%" rune result)
-  :direction :exit)
-
-(def-trace-output fgl-trace-meta-failure-output ((rhs pseudo-termp))
-  :key :on-failure
-  :ev-bindings (`(rhs . ,(pseudo-term-fix rhs))
-                `(errmsg . ,(interp-st->errmsg interp-st)))
-  :description "trace failure term"
-  :default (msg "~x0 failed: (~@1)~%"
-                rune
-                (let ((errmsg (interp-st->errmsg interp-st)))
-                  (cond ((msgp errmsg) errmsg)
-                        (errmsg (msg "~x0" errmsg))
-                        (t "aborted"))))
-  :direction :exit)
-
-
-(make-event
- `(define fgl-trace-finish-meta ((successp)
-                                 (result fgl-object-p)
-                                 (rhs pseudo-termp)
-                                 . ,*traceeval-common-inputs*)
-    :returns (mv new-interp-st new-state)
-    (if (and successp (not (interp-st->errmsg interp-st)))
-        (fgl-trace-meta-success-output result rhs rule fn bindings tracep interp-st state)
-      (fgl-trace-meta-failure-output rhs rule fn bindings tracep interp-st state))
-    ///
-    (make-event `(progn . ,*fancy-ev-primitive-thms*))))
- 
-
 (defxdoc fgl-rewrite-tracing
   :parents (fgl)
   :short "How to trace the FGL rewriter"
@@ -560,8 +503,7 @@ printed (same as if the keyword was not provided), or a @(see acl2::msg)
 object, in which case it is printed with the @('~@') formatting directive.</li>
 
 <li>@(':on-relieve-hyp relieve-expr'): If provided, after each successful
-relieving of a hypothesis (for a rewrite rule) or after successfully evaluating
-the metafunction (for a meta rule), @('relieve-expr') is evaluated and may
+relieving of a hypothesis, @('relieve-expr') is evaluated and may
 cause some output to be printed. (By default no output is printed in this case,
 unlike for entry, success, and failure.) The expression may use the standard
 trace variables as well as @('hyp') (see below). The resulting object should either
@@ -571,40 +513,20 @@ directive.</li>
 
 <li>@(':on-success success-expr'): If provided, @('success-expr') is evaluated
 when the rule has been applied successfully. The expression may use the
-standard trace variables as well as @('result') and additionally @('rhs') if
-the rule is a meta rule (see below).  The resulting object should either be
+standard trace variables as well as @('result').  The resulting object should either be
 @('nil'), in which case nothing is printed, @(':default'), in which case the
 default success message is printed (same as if the keyword was not provided),
 or a @(see acl2::msg) object, in which case it is printed with the @('~@')
 formatting directive.</li>
 
 <li>@(':on-failure failure-expr'): If provided, @('failure-expr') is evaluated
-when the application of the rule has failed. For a rewrite rule, this may be
-either because of an unrelieved hypothesis or an error or abort. For a meta
-rule, this is due to an error or abort in rewriting the RHS; a failure in
-applying the metafunction instead results in the eval-failure
-condition (below).  The expression may use the standard trace variables as well
-as @('errmsg') and @('hyp') and additionally @('rhs') if the rule is a meta
-rule (see below).  The resulting object should either be @('nil'), in which
-case nothing is printed, @(':default'), in which case the default failure
-message is printed (same as if the keyword was not provided), or a @(see
-acl2::msg) object, in which case it is printed with the @('~@') formatting
-directive.</li>
-
-<li>@(':on-eval-success success-expr'): If provided, and if the rule is a meta
-rule, @('success-expr') is evaluated when the metafunction has been
-successfully executed, before the resulting RHS term is rewritten.  The
-expression may use the standard trace variables as well as @('rhs') (see
-below).  The resulting object should either be @('nil')/@(':default'), in which
-case nothing is printed, or a @(see acl2::msg) object, in which case it is
-printed with the @('~@') formatting directive.</li>
-
-<li>@(':on-eval-failure failure-expr'): If provided, and if the rule is a meta
-rule, @('failure-expr') is evaluated when the metafunction has been
-unsuccessfully executed.  The expression may use the standard trace variables
-as well as @('errmsg') (see below).  The resulting object should either be
-@('nil')/@(':default'), in which case nothing is printed, or a @(see acl2::msg)
-object, in which case it is printed with the @('~@') formatting directive.</li>
+when the application of the rule has failed. This may be either because of an
+unrelieved hypothesis or an error or abort.  The expression may use the
+standard trace variables as well as @('errmsg') and @('hyp').  The resulting object should
+either be @('nil'), in which case nothing is printed, @(':default'), in which
+case the default failure message is printed (same as if the keyword was not
+provided), or a @(see acl2::msg) object, in which case it is printed with the
+@('~@') formatting directive.</li>
 
 <li>@(':restore-rules restorep'): If provided and @('restorep') is nonnil,
 whenever an application of the rule is traced the current trace rules are
@@ -630,15 +552,12 @@ traced (i.e. its cond expression evaluates to nil).</li>
 
 <li>@('rune'): the name of the traced rule.</li>
 
-<li>@('fn'), @('args'): the function and arguments (FGL objects) of the
+<li>@('fn'), @('args'): the function and arguments (FGL arglist) of the
 object being rewritten.</li>
 
 <li>@('bindings'): The substitution under which the rule is being applied. At
 any point in applying a rewrite rule, this is the unifying substitution plus
-any free variable bindings that have been added. When applying a meta or
-primitive rule, the bindings are initially empty. For a meta rule, after
-evaluating the metafunction, it is populated with the bindings returned by the
-metafunction (for a primitive, it remains empty).</li>
+any free variable bindings that have been added.</li>
 </ul>
 
 <p>The following variables can be used in some situations:</p>
@@ -656,10 +575,6 @@ otherwise NIL.</li>
 
 <li>@('errmsg'): The error message ending application of the rule, or NIL if
 none, available in @(':on-failure') and @(':on-eval-failure') cases.</li>
-
-<li>@('rhs'): the computed RHS term returned by a metafunction, available in
-the @(':on-eval-success') and metafunctions' @(':on-success') and
-@(':on-failure') cases.</li>
 
 </ul>
 
