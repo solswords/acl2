@@ -446,7 +446,7 @@
             :in-theory (disable interp-st-sat-check-unsat-implies)))))
 
 (def-fgl-binder-meta sat-check-raw-binder
-  (if (and (eq (pseudo-fnsym-fix fn) 'sat-check-raw)
+  (if (and (eq (pseudo-fnsym-fix origfn) 'sat-check-raw)
            (eql (len args) 2))
       (b* (((list config x) args)
            ((unless (fgl-object-case config :g-concrete))
@@ -507,7 +507,7 @@
                                (interp-st->logicman interp-st))))
 
 (def-fgl-binder-meta sat-check-with-witness-raw-binder
-  (if (and (eq (pseudo-fnsym-fix fn) 'sat-check-with-witness-raw)
+  (if (and (eq (pseudo-fnsym-fix origfn) 'sat-check-with-witness-raw)
            (eql (len args) 2))
       (b* (((unless (bfr-mode-is :aignet (interp-st-bfr-mode)))
             (fgl-interp-error
