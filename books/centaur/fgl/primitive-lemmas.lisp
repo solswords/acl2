@@ -31,9 +31,14 @@
 (in-package "FGL")
 
 (include-book "logicman")
-(include-book "unify-defs")
+(include-book "unify-thms")
 (local (include-book "centaur/bitops/ihsext-basics" :dir :system))
 (local (std::add-default-post-define-hook :fix))
+
+(local (defthm assoc-equal-when-nonnil
+         (implies key
+                  (equal (assoc-equal key a)
+                         (hons-assoc-equal key a)))))
 
 (defthm fgl-objectlist-eval-when-consp
   (implies (consp x)
@@ -49,11 +54,48 @@
                         (fgl-arglist->objects (cdr x)))))
   :hints(("Goal" :in-theory (enable fgl-arglist->objects))))
 
+(defthm consp-of-fgl-arglist->objects
+  (equal (consp (fgl-arglist->objects x))
+         (consp x))
+  :hints(("Goal" :in-theory (enable fgl-arglist->objects))))
+
 (defthm fgl-arglist->objects-when-atom
   (implies (not (consp x))
            (equal (fgl-arglist->objects x) nil))
   :hints(("Goal" :in-theory (enable fgl-arglist->objects))))
 
+(defthm fgl-ev-alist-of-cons
+  (equal (fgl-ev-alist (cons a rest) env)
+         (let ((rest (fgl-ev-alist rest env)))
+           (if (and (consp a)
+                    (pseudo-var-p (car a)))
+               (cons (cons (car a) (fgl-ev (cdr a) env))
+                     rest)
+             rest)))
+  :hints(("Goal" :in-theory (enable fgl-ev-alist))))
+
+(defthm fgl-ev-alist-of-nil
+  (equal (fgl-ev-alist nil env) nil)
+  :hints(("Goal" :in-theory (enable fgl-ev-alist))))
+
+
+(defthm fgl-arglist-eval-with-rev-subst-when-consp
+  (implies (consp args)
+           (equal (fgl-arglist-eval-with-rev-subst
+                   args rev-subst env)
+                  (cons (b* ((x1 (car args)))
+                          (fgl-arg-case x1
+                            :obj (fgl-object-eval x1.obj env)
+                            :unbound (cdr (hons-assoc-equal x1.var rev-subst))))
+                        (fgl-arglist-eval-with-rev-subst
+                         (cdr args) rev-subst env))))
+  :hints(("Goal" :in-theory (enable fgl-arglist-eval-with-rev-subst))))
+
+(defthm fgl-arglist-eval-with-rev-subst-when-atom
+  (implies (not (consp args))
+           (equal (fgl-arglist-eval-with-rev-subst args rev-subst env)
+                  nil))
+  :hints(("Goal" :in-theory (enable fgl-arglist-eval-with-rev-subst))))
 
 (in-theory (enable fgl-objectlist-bfrlist-when-consp))
 
