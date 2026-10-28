@@ -2791,23 +2791,14 @@
                (local (in-theory (disable bvar-db-wfp$c-updater-independence))))
     (b* ((interp-st (interp-st-prof-push (fgl-rule->rune rule) interp-st))
          (rule (fgl-rule-fix rule))
-         ((mv tracep interp-st state)
-          (fgl-trace-start rule fn nil interp-st state))
          ((fgl-interp-value successp ans)
           (fgl-primitive-fncall-stub (fgl-rule-primitive->name rule) fn args interp-st state))
-         ((mv interp-st state)
-          (fgl-trace-finish-meta successp ans nil rule fn nil tracep interp-st state))
          (interp-st (interp-st-prof-pop-increment successp interp-st)))
       (fgl-interp-value successp ans))
     ///
     (local (acl2::use-trivial-ancestors-check))
     ,@*fgl-primitive-rule-thms*
 
-    (local (defret errmsg-preserved-of-fgl-trace-finish-meta-forward
-             (implies (not (interp-st->errmsg new-interp-st))
-                      (not (interp-st->errmsg interp-st)))
-             :rule-classes :forward-chaining
-             :fn fgl-trace-finish-meta))
     (defret eval-of-<fn>
       (implies (and successp
                     (equal contexts (interp-st->equiv-contexts interp-st))
@@ -4884,7 +4875,7 @@
              (rune (fgl-rule->rune rule))
              (interp-st (interp-st-push-rule-frame rule bindings interp-st))
              (interp-st (interp-st-prof-push rune interp-st))
-             ((mv tracep interp-st state) (fgl-trace-start rule fn bindings interp-st state))
+             ((mv tracep interp-st state) (fgl-trace-start rule fn interp-st state))
 
              ((mv failed-hyp val rev-bindings interp-st state)
               (fgl-rewrite-apply-rule-core
@@ -4892,7 +4883,7 @@
              
              ((when (or** failed-hyp (interp-st->errmsg interp-st)))
               (b* (((mv interp-st state)
-                    (fgl-trace-failure-output failed-hyp rule fn bindings tracep interp-st state))
+                    (fgl-trace-failure-output failed-hyp rule fn tracep interp-st state))
                    (interp-st (interp-st-prof-pop-increment nil interp-st))
                    (interp-st (interp-st-pop-frame interp-st))
                    (interp-st (interp-st-cancel-error :intro-bvars-fail interp-st))
@@ -4911,7 +4902,7 @@
              ((mv interp-st state)
               ;; Note: determines success by checking interp-st->errmsg, so
               ;; don't move below the cancel-error below.
-              (fgl-trace-finish-rewrite val rule fn bindings tracep interp-st state))
+              (fgl-trace-finish-rewrite val rule fn tracep interp-st state))
              (err (interp-st->errmsg interp-st))
              (successp (not (eq err :abort-rewrite)))
              (val (and (not err) val))
@@ -5012,8 +5003,7 @@
               (fgl-interp-value hypnum))
              (interp-st (interp-st-incr-phase interp-st))
              ((mv interp-st state)
-              (fgl-trace-relieve-hyp-output hypnum rule fn (interp-st-bindings interp-st)
-                                            tracep interp-st state)))
+              (fgl-trace-relieve-hyp-output hypnum rule fn tracep interp-st state)))
           (fgl-rewrite-relieve-hyps rule fn (cdr hyps) tracep interp-st state)))
 
       (define fgl-rewrite-relieve-hyp ((hyp pseudo-termp)

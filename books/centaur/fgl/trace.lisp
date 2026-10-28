@@ -130,7 +130,6 @@
 (defconst *traceeval-common-inputs*
   '((rule fgl-rule-p)
     (fn pseudo-fnsym-p)
-    (bindings fgl-object-bindings-p)
     (tracep)
     (interp-st interp-st-bfrs-ok)
     (state)))
@@ -207,8 +206,9 @@
 
 (define interp-st-rewrite-args (interp-st)
   :returns (args fgl-arglist-p)
-  (and (< 0 (interp-st-scratch-len interp-st))
-       (let ((scratch (interp-st-top-scratch interp-st)))
+  ;; Rule frames have their own scratch stack; arguments are saved by the caller.
+  (and (< 0 (interp-st-full-scratch-len interp-st))
+       (let ((scratch (interp-st-nth-scratch 0 interp-st)))
          (scratchobj-case scratch :fgl-arglist scratch.val :otherwise nil))))
 
 (local (acl2::use-trivial-ancestors-check))
@@ -224,6 +224,7 @@
          (depth (+ 1 (interp-st->trace-depth interp-st)))
          (rune (fgl-rule->rune rule))
          (args (interp-st-rewrite-args interp-st))
+         (bindings (interp-st-bindings interp-st))
          (interp-st (update-interp-st->tracespecs
                      (cons tracespec (interp-st->tracespecs interp-st))
                      interp-st))
@@ -262,6 +263,7 @@
      (b* (((unless tracep) (mv interp-st state))
           (tracespec (car (interp-st->tracespecs interp-st)))
           (depth (interp-st->trace-depth interp-st))
+          (bindings (interp-st-bindings interp-st))
           ((mv interp-st state)
            (b* (((unless tracespec)
                  (mv interp-st state))
@@ -358,8 +360,8 @@
                                     . ,*traceeval-common-inputs*)
     :returns (mv new-interp-st new-state)
     (if (not (interp-st->errmsg interp-st))
-        (fgl-trace-success-output result rule fn bindings tracep interp-st state)
-      (fgl-trace-failure-output nil rule fn bindings tracep interp-st state))
+        (fgl-trace-success-output result rule fn tracep interp-st state)
+      (fgl-trace-failure-output nil rule fn tracep interp-st state))
     ///
     (make-event `(progn . ,*fancy-ev-primitive-thms*))))
 
@@ -372,7 +374,9 @@
 <p>FGL allows attempts at applying rewrite rules to be traced using a
 configurable tracing function.  By default, a basic tracing function is
 provided such that the user only needs to set up some state global variables to
-enable and use it.</p>
+enable and use it. Rule tracing covers rewrite applications, including
+applications constructed by metafunctions. To trace execution of a metafunction
+or primitive itself, use ACL2's @(see acl2::trace$) on that function.</p>
 
 <h3>Basic Tracing</h3>
 
@@ -435,8 +439,6 @@ state globals:</p>
                      (cond 'nil cond-p)
                      (on-entry 'nil on-entry-p)
                      (on-relieve-hyp 'nil on-relieve-hyp-p)
-                     (on-eval-success 'nil on-eval-success-p)
-                     (on-eval-failure 'nil on-eval-failure-p)
                      (on-success 'nil on-success-p)
                      (on-failure 'nil on-failure-p)
                      (restore-rules 'nil))
@@ -444,8 +446,6 @@ state globals:</p>
                  (list . ,(append (and cond-p `(:cond ',cond))
                                   (and on-entry-p `(:on-entry ',on-entry))
                                   (and on-relieve-hyp-p `(:on-relieve-hyp ',on-relieve-hyp))
-                                  (and on-eval-success-p `(:on-eval-success ',on-eval-success))
-                                  (and on-eval-failure-p `(:on-eval-failure ',on-eval-failure))
                                   (and on-success-p `(:on-success ',on-success))
                                   (and on-failure-p `(:on-failure ',on-failure))))
                  ,restore-rules
@@ -557,7 +557,8 @@ object being rewritten.</li>
 
 <li>@('bindings'): The substitution under which the rule is being applied. At
 any point in applying a rewrite rule, this is the unifying substitution plus
-any free variable bindings that have been added.</li>
+any free variable bindings that have been added. Trace functions read these
+bindings directly from the current interpreter frame.</li>
 </ul>
 
 <p>The following variables can be used in some situations:</p>
@@ -574,7 +575,7 @@ case, this is the index of the latest hypothesis relieved, and in the
 otherwise NIL.</li>
 
 <li>@('errmsg'): The error message ending application of the rule, or NIL if
-none, available in @(':on-failure') and @(':on-eval-failure') cases.</li>
+none, available in the @(':on-failure') case.</li>
 
 </ul>
 

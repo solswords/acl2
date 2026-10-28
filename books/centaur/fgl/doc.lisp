@@ -1609,7 +1609,7 @@ frames you're most interested in by looking at the debug info, and then examine
 those frames closer by indexing into the stack with @('nth') etc.</p>
 
 <p>It may be useful to set a lower recursion limit for the FGL interpreter.
-The default is 10000, but it may help to catch runaway rule applications to
+The default is 1000000, but it may help to catch runaway rule applications to
 limit it to 1000 or less.  This can be adjusted by setting the state global
 @(':fgl-reclimit').</p>
 
