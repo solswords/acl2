@@ -919,12 +919,11 @@ rewrite rule that is only used inside FGL:</p>
     :hints ...)
 })
 
-<!-- FGL-DOC-UPDATE-BEGIN: fgl-rule-enabled-status -->
-<p>This defines a disabled ACL2 rewrite rule called my-rewrite-rule, and adds
-my-rewrite-rule to the table of rules FGL is allowed to use. (FGL will still use
-it even though it is disabled, as long as it is in that table.)</p>
+<p>This defines an ACL2 theorem called @('my-rewrite-rule') with its ACL2
+rewrite rule disabled, and registers it as enabled in FGL's rewrite database.
+(Note that a rule's enabled status for the ACL2 prover and for FGL are
+independent.)</p>
 
-<!-- FGL-DOC-UPDATE-END: fgl-rule-enabled-status -->
 <p>The optional @(':arg-modes') list specifies whether each direct LHS
 argument must be bound (@(':bound')), may be either form (@(':either')), or
 must be an unbound variable (@(':unbound')).  Omitted positions are
@@ -933,7 +932,10 @@ must be an unbound variable (@(':unbound')).  Omitted positions are
 <p>Def-fgl-rewrite supports syntaxp hypotheses, but the term representation used
 is different from ACL2's.  Instead of being bound to TERMPs, the variables are
 bound to symbolic objects.  See @(see fgl::fgl-object) for
-reference.</p>"
+reference.</p>
+
+<p>See also related utilities @(see add-fgl-rewrite) and @(see
+remove-fgl-rewrite).</p>"
 
   (defmacro def-fgl-rewrite (name &rest args)
     (b* (((mv & modes theorem-args) (extract-fgl-rule-arg-modes args)))
