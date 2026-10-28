@@ -160,7 +160,7 @@
 
 ;; (table fgl-fn-modes
 ;;        nil
-;;        (let ((my-fn-mode (make-fgl-function-mode :dont-expand-def t)))
+;;        (let ((my-fn-mode (make-fgl-function-mode :dont-rewrite t)))
 
 ;;          (list (cons 'unsigned-byte-p my-fn-mode)
 ;;                (cons 'acl2::loghead$inline my-fn-mode)

@@ -48,16 +48,11 @@
    (dont-concrete-exec booleanp
     "If true, skip attempting to concretely execute the function in the case when
      all the arguments are explicit.")
-   (dont-expand-def booleanp
-    "If true, skip expanding the function's definition after attempting ~
-     rewrites and primitive execution.")
    (dont-rewrite booleanp
     "If true, skip applying rewrite rules to calls of the function.")
    (dont-rewrite-under-if-test booleanp
     "If true, skip applying rewrite rules to calls of the function when trying
      to resolve an IF test to a Boolean formula.")
-   (dont-primitive-exec booleanp
-    "If true, skip applying primitives to calls of the function.")
    (dont-if-merge-args
     booleanp
     "If we encounter an IF term where both branches rewrite to a call of this
@@ -68,7 +63,7 @@
   :guard-hints(("Goal" :in-theory (enable fgl-function-mode-fix)))
   :enabled t
   (mbe :logic (fgl-function-mode-fix x)
-       :exec (loghead 7 (ifix x))))
+       :exec (loghead 5 (ifix x))))
 
 (fty::defmap fgl-function-mode-alist :key-type symbolp :val-type fgl-function-mode :true-listp t)
 
@@ -104,7 +99,7 @@ perhaps not in a useful direction.")
     (rewrite-rule-table :default (table-alist 'fgl-rewrite-rules (w state))
                         "The rewrite rule table. Probably shouldn't be changed
 by the user; instead use the utilities described in @(see fgl-rewrite-rules).")
-    (branch-merge-rules :default (cdr (hons-assoc-equal 'fgl::fgl-branch-merge-rules (table-alist 'fgl-branch-merge-rules (w state))))
+    (branch-merge-rules :default (table-alist 'fgl-branch-merge-rules (w state))
                         "The branch-merge rewrite rule table. Probably
 shouldn't be changed by the user; instead use the utilities described in @(see
 fgl-rewrite-rules).")
