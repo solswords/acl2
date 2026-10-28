@@ -60,21 +60,20 @@ user asks it to do.</p>
   ///
   (defequiv unequiv))
 
-;; FGL-DOC-UPDATE-BEGIN: binder-form-doc
 (define binder (val)
   :parents (fgl-rewrite-rules)
   :ignore-ok t
   :irrelevant-formals-ok t
   :enabled t
-  :short "Obsolete form that used to indicate that FGL should treat the contents as a
-binder function call."
-  :long "<p>Logically, @('(binder val)') just returns @('val'). The intended
-use in FGL was to indicate the use of a binder function inside, which wasn't
-necessary and is no longer supported. It is now just a regular identity
-function with no special significance.</p>"
+  :short "Obsolete wrapper for function calls that bind free variables in FGL."
+  :long "<p>@('(binder val)') returns @('val') and is interpreted as an ordinary
+identity function. Older code used this wrapper to request special handling of
+a call with an unbound first argument. Function calls now use the ordinary
+rewrite and meta rule machinery to bind unbound arguments, as allowed by the
+registered argument modes. The wrapper is unnecessary and receives no special
+interpreter treatment. See @(see binder-rules).</p>"
   val)
 
-;; FGL-DOC-UPDATE-END: binder-form-doc
 (define bind-var (ans form)
   :parents (fgl-rewrite-rules)
   :short "Form that can bind a free variable to the result of an arbitrary computation."
