@@ -4523,7 +4523,8 @@
                       :var (and (not (assoc-eq arg1.name (interp-st-minor-bindings interp-st)))
                                 (not (assoc-eq arg1.name (interp-st-bindings interp-st))))
                       :otherwise nil))
-              (b* (((fgl-interp-value rest)
+              (b* ((interp-st (interp-st-incr-term-index 1 interp-st))
+                   ((fgl-interp-value rest)
                     (fgl-interp-arglist (cdr args) (equiv-argcontexts-rest argcontexts) interp-st state)))
                 (fgl-interp-value (cons (fgl-arg-unbound (pseudo-term-var->name arg1)) rest))))
              ((interp-st-bind

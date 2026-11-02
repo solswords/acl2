@@ -589,13 +589,17 @@
                    ,return-returns)))
              (if successp
                  (mv successp
-                     ;; new rhs
-                     (pseudo-term-var binder-var)
+                     ;; Use a rule-local variable distinct from the caller's
+                     ;; binder variable and unlikely to occur in BODY's terms.
+                     (pseudo-term-var 'fgl-binder-meta-result-variable)
                      ;; hyp with binding hyp
                      (append hyps
-                             (list (pseudo-term-fncall 'equal (list (pseudo-term-var binder-var) rhs))))
+                             (list (pseudo-term-fncall
+                                    'equal
+                                    (list (pseudo-term-var 'fgl-binder-meta-result-variable)
+                                          rhs))))
                      ;; rev-subst
-                     (list (cons binder-var (pseudo-term-var binder-var)))
+                     (list (cons binder-var (pseudo-term-var 'fgl-binder-meta-result-variable)))
                      bindings interp-st state)
                (mv nil nil nil nil nil interp-st state)))
          (mv nil nil nil nil nil interp-st state))

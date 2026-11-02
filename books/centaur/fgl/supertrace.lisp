@@ -258,7 +258,7 @@ syntax-interp), @(see syntax-bind), syntaxp, and bind-free forms.</p>")
     (mv nil rune interp-st)))
 
 (defmacro fgl-untrace* (rune &key (interp-st 'interp-st))
-  `(fgl-untrace*-fn ',rune ,interp-st))
+  `(fgl-untrace*-fn ',rune :interp-st ,interp-st))
 
 (defxdoc fgl-untrace*
   :parents (fgl-rewrite-tracing)

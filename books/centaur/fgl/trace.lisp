@@ -464,11 +464,10 @@ traced and what output will be printed.</p>
 @({
  (fgl-trace (:formula logext-to-logapp)
    :cond (fgl-object-case n :g-integer)
-   :on-entry (list 'logext-to-logapp n x)
+   :on-entry (msg \"logext-to-logapp: n=~x0 x=~x1\" n x)
    :on-success (msg \"~x0 success: n=~x1 x=~x2 result=~x3\" 'logext-to-logapp n x result)
-   :on-failure (msg \"~x0 failure: hyp ~x1 errmsg ~x2\" 'logext-to-logapp failed-hyp errmsg)
-   :restore-rules t
-   :location state)
+   :on-failure (msg \"~x0 failure: hyp ~x1 errmsg ~x2\" 'logext-to-logapp hyp errmsg)
+   :restore-rules t)
  })
 
 <p>See @(see fgl-untrace) and @(see fgl-untrace-all) to remove traces from rules.</p>
@@ -530,8 +529,9 @@ provided), or a @(see acl2::msg) object, in which case it is printed with the
 
 <li>@(':restore-rules restorep'): If provided and @('restorep') is nonnil,
 whenever an application of the rule is traced the current trace rules are
-backed up at the start and restored at the end of tracing (albeit before
-evaluating the success or failure expressions). This is useful if you want a
+backed up at the start and restored at the end of tracing, after evaluating
+the success or failure expressions. Changes to trace rules made by these
+expressions are also undone. This is useful if you want a
 trace of one rule to cause tracing of another rule; see @(see
 fgl-advanced-tracing).</li>
 
