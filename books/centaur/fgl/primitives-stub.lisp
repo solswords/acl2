@@ -31,6 +31,7 @@
 (in-package "FGL")
 
 (include-book "stack-ev")
+(include-book "binding-domains")
 (include-book "scratch-isomorphic")
 (include-book "interp-st-bvar-db-ok")
 (include-book "centaur/meta/world-equiv" :dir :system)
@@ -415,6 +416,12 @@
                       (fgl-object-eval (get-bvar->term$c n bvar-db)
                                        env
                                        (interp-st->logicman interp-st))))))
+
+    ;; Structural contracts do not require choosing an evaluation environment.
+    (defret stack-binding-domains-of-<fn>
+      (implies (interp-st-bfrs-ok interp-st)
+               (equal (stack-binding-domains (interp-st->stack new-interp-st))
+                      (stack-binding-domains (interp-st->stack interp-st)))))
 
     (defret major-stack-concretize-of-<fn>
       (implies (interp-st-bfrs-ok interp-st)
