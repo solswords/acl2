@@ -417,11 +417,10 @@
                                        env
                                        (interp-st->logicman interp-st))))))
 
-    ;; Structural contracts do not require choosing an evaluation environment.
+    ;; Structural preservation does not depend on BFR well-formedness or evaluation.
     (defret stack-binding-domains-of-<fn>
-      (implies (interp-st-bfrs-ok interp-st)
-               (equal (stack-binding-domains (interp-st->stack new-interp-st))
-                      (stack-binding-domains (interp-st->stack interp-st)))))
+      (equal (stack-binding-domains (interp-st->stack new-interp-st))
+             (stack-binding-domains (interp-st->stack interp-st))))
 
     (defret major-stack-concretize-of-<fn>
       (implies (interp-st-bfrs-ok interp-st)
