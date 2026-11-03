@@ -7255,88 +7255,18 @@
                            (y (stack$a-pop-frame (interp-st->stack old))))))))
 
 
-  ;; TODO: Preserve the unbound-variable keys of :fgl-arglist scratch objects
-  ;; in scratchobj-isomorphic, in addition to their length.  Then replace the
-  ;; following concretization bridge with a structural scratch-isomorphism fact.
-  (local (defthm fgl-arglist-unbounds-of-concretize
-           (equal (fgl-arglist-unbounds (fgl-arglist-concretize x env logicman))
-                  (fgl-arglist-unbounds x))
-           :hints(("Goal" :in-theory (enable fgl-arglist-concretize
-                                             fgl-arglist-unbounds)))))
-
-  
-  (local (defthm scratchobj-kind-top-of-stack-concretize
-           (equal (scratchobj-kind (stack$a-top-scratch
-                                    (fgl-major-stack-concretize stack env logicman)))
-                  (scratchobj-kind (stack$a-top-scratch stack)))
-           :hints(("Goal" :in-theory (e/d (fgl-major-frame-concretize
-                                           fgl-minor-frame-concretize
-                                           stack$a-top-scratch
-                                           fgl-scratchobj-concretize)
-                                          (FGL-SCRATCHLIST-CONCRETIZE-OF-CDR))
-                   :expand ((FGL-MAJOR-STACK-CONCRETIZE stack env)
-                            (fgl-minor-stack-concretize
-                             (major-frame->minor-stack (car stack)) env)
-                            (:free (frame)
-                             (fgl-scratchlist-concretize
-                              (minor-frame->scratch frame) env)))
-                   :do-not-induct t))))
-  
-  (local (defthm fgl-arglist-unbounds-of-stack-concretize
-           (implies (scratchobj-case (stack$a-top-scratch stack) :fgl-arglist)
-                    (equal (fgl-arglist-unbounds
-                            (scratchobj-fgl-arglist->val
-                             (stack$a-top-scratch (fgl-major-stack-concretize stack env logicman))))
-                           (fgl-arglist-unbounds
-                            (scratchobj-fgl-arglist->val
-                             (stack$a-top-scratch stack)))))
-           :hints(("Goal" :in-theory (e/d (fgl-major-stack-concretize
-                                           fgl-major-frame-concretize
-                                           fgl-minor-stack-concretize
-                                           fgl-minor-frame-concretize
-                                           stack$a-top-scratch
-                                           fgl-scratchobj-concretize)
-                                          (FGL-SCRATCHLIST-CONCRETIZE-OF-CDR))
-                   :expand ((FGL-MAJOR-STACK-CONCRETIZE stack env)
-                            (fgl-minor-stack-concretize
-                             (major-frame->minor-stack (car stack)) env)
-                            (:free (frame)
-                             (fgl-scratchlist-concretize
-                              (minor-frame->scratch frame) env)))
-                   :do-not-induct t))))
-
-  (fgl::def-updater-independence-thm fgl-arglist-unbounds-by-concretize
-    (implies (and (bind-free '((env . env)))
-                  (stack-equiv-except-top-bindings
-                   (fgl-major-stack-concretize (interp-st->stack new)
-                                               env (interp-st->logicman new))
-                   (fgl-major-stack-concretize (interp-st->stack old)
-                                               env (interp-st->logicman old)))
-                  (double-rewrite
-                   (equal (scratchobj-kind (stack$a-top-scratch (interp-st->stack old)))
-                          :fgl-arglist)))
+  (defthm fgl-arglist-unbounds-top-scratch-structural-rw
+    (implies (and (major-stack-scratch-isomorphic old (double-rewrite new))
+                  (syntaxp (not (equal new old)))
+                  (double-rewrite (scratchobj-case (stack$a-top-scratch old) :fgl-arglist)))
              (equal (fgl-arglist-unbounds
-                     (scratchobj-fgl-arglist->val
-                      (stack$a-top-scratch (interp-st->stack new))))
+                     (scratchobj-fgl-arglist->val (stack$a-top-scratch new)))
                     (fgl-arglist-unbounds
-                     (scratchobj-fgl-arglist->val
-                      (stack$a-top-scratch (interp-st->stack old))))))
-    :hints (("goal" :in-theory (e/d (stack-equiv-except-top-bindings
-                                     minor-stack-equiv-except-top-debug
-                                     stack$a-top-scratch)
-                                    (scratchobj-kind-top-of-stack-concretize))
-             :use ((:instance fgl-arglist-unbounds-of-stack-concretize
-                    (stack (interp-st->stack new))
-                    (logicman (interp-st->logicman new)))
-                   (:instance fgl-arglist-unbounds-of-stack-concretize
-                    (stack (interp-st->stack old))
-                    (logicman (interp-st->logicman old)))
-                   (:instance scratchobj-kind-top-of-stack-concretize
-                    (stack (interp-st->stack new))
-                    (logicman (interp-st->logicman new)))
-                   (:instance scratchobj-kind-top-of-stack-concretize
-                    (stack (interp-st->stack old))
-                    (logicman (interp-st->logicman old)))))))
+                     (scratchobj-fgl-arglist->val (stack$a-top-scratch old)))))
+    :hints (("Goal" :use ((:instance fgl-arglist-unbounds-when-scratchobj-isomorphic
+                           (x (stack$a-top-scratch new))
+                           (y (stack$a-top-scratch old))))
+             :in-theory (disable fgl-arglist-unbounds-when-scratchobj-isomorphic))))
 
   (defthm alist-keys-top-scratch-bindings-structural-rw
     (implies (and (major-stack-scratch-isomorphic old (double-rewrite new))
