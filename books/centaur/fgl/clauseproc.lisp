@@ -431,8 +431,8 @@
                  :expand ((major-stack-bfrlist stack))))))
 
 (local (defthm iff?-forall-extensions-of-nil
-         (equal (iff?-forall-extensions nil obj term eval-alist)
-                (iff-forall-extensions obj term eval-alist))
+         (equal (iff?-forall-extensions nil term eval-alist)
+                (iff-forall-extensions term eval-alist))
          :hints(("Goal" :in-theory (enable iff?-forall-extensions)))))
 
 (define fgl-clause-proc-core ((goal pseudo-termp)
@@ -620,11 +620,6 @@
                          (env ,(acl2::hq env))
                          (st state)
                          (state ,(acl2::hq init-interp-state)))
-                        (:instance iff-forall-extensions-necc
-                         (obj ,(acl2::hq ans-eval))
-                         (term ,(acl2::hq goal))
-                         (eval-alist ,(acl2::hq eval-alist))
-                         (ext ,(acl2::hq eval-alist)))
                         (:instance fgl-ev-of-extension-when-term-vars-bound
                          (b ,(acl2::hq eval-alist))
                          (a ,(acl2::hq orig-alist))
@@ -657,11 +652,6 @@
                          (env ,(acl2::hq env))
                          (st state)
                          (state ,(acl2::hq init-interp-state)))
-                        (:instance iff-forall-extensions-necc
-                         (obj ,(acl2::hq ans-eval))
-                         (term ,(acl2::hq goal))
-                         (eval-alist ,(acl2::hq eval-alist))
-                         (ext ,(acl2::hq eval-alist)))
                         (:instance fgl-ev-of-extension-when-term-vars-bound
                          (b ,(acl2::hq eval-alist))
                          (a ,(acl2::hq orig-alist))
