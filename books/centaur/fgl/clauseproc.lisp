@@ -581,9 +581,6 @@
                   (fgl-major-stack-concretize x env))
            :hints(("Goal" :in-theory (enable fgl-major-stack-concretize)))))
 
-
-  (local (in-theory (disable fgl-interp-test-bvar-db-ok-implies-previous-ok)))
-
   (defret fgl-clause-proc-core-correct
     (implies (and (fgl-ev-meta-extract-global-facts)
                   (fgl-formula-checks-stub state)
