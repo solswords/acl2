@@ -5834,33 +5834,19 @@
 (with-output :off (event)
   :evisc (:gag-mode (evisc-tuple 8 10 nil nil) :term nil)
   (defsection-progn fgl-interp-arglist-return-shapes
-    
-    (std::defret-mutual len-of-fgl-interp-arglist
+
+    ;; Share the flag induction and expansion of the interpreter bodies.
+    (std::defret-mutual fgl-interp-arglist-return-shapes
       (defret len-of-fgl-interp-arglist
         (equal (len arg-objs) (len args))
         :fn fgl-interp-arglist)
-      :hints ((fgl-interp-default-hint 'fgl-interp-term id nil world))
-      :mutual-recursion fgl-interp
-      :skip-others t)
-
-    (std::defret-mutual len-of-fgl-interp-lambda-arglist
       (defret len-of-fgl-interp-lambda-arglist
         (equal (len arg-objs) (len args))
         :fn fgl-interp-lambda-arglist)
-      :hints ((fgl-interp-default-hint 'fgl-interp-term id nil world))
-      :mutual-recursion fgl-interp
-      :skip-others t)
-
-    (std::defret-mutual true-listp-of-fgl-interp-arglist
       (defret true-listp-of-fgl-interp-arglist
         (true-listp arg-objs)
         :fn fgl-interp-arglist
         :rule-classes :type-prescription)
-      :hints ((fgl-interp-default-hint 'fgl-interp-term id nil world))
-      :mutual-recursion fgl-interp
-      :skip-others t)
-
-    (std::defret-mutual true-listp-of-fgl-interp-lambda-arglist
       (defret true-listp-of-fgl-interp-lambda-arglist
         (true-listp arg-objs)
         :fn fgl-interp-lambda-arglist
@@ -6034,20 +6020,36 @@
              (equal (logicman->mode (interp-st->logicman new))
                     (logicman->mode (interp-st->logicman old))))))
 
-(defsection-progn fgl-interp-preserves-logicman-mode
-  (with-output
-    :off (event)
-    :evisc (:gag-mode (evisc-tuple 8 10 nil nil) :term nil)
-    (std::defret-mutual-generate <fn>-preserves-logicman->mode
-      :rules ((t (:add-concl (equal (logicman->mode (interp-st->logicman new-interp-st))
-                                    (logicman->mode (interp-st->logicman interp-st))))
-                 (:add-keyword :hints ('(:do-not-induct t)
-                                       (let ((flag (find-flag-is-hyp clause)))
-                                         (and flag
-                                              (prog2$ (cw "flag: ~x0~%" flag)
-                                                      '(:no-op t))))))))
-      :hints ((fgl-interp-default-hint 'fgl-interp-term id nil world))
-      :mutual-recursion fgl-interp)))
+(defsection-progn fgl-interp-preserves-state-fields
+  ;; These properties need the same interpreter expansion.  Prove them in one
+  ;; induction while exporting the individual theorems with their usual names.
+  (encapsulate nil
+    (local (in-theory (enable stack$a-update-scratch-in-terms-of-push-pop)))
+    (with-output
+      :off (event)
+      :evisc (:gag-mode (evisc-tuple 8 10 nil nil) :term nil)
+      (std::defret-mutual-generate
+        (std::defret-generate <fn>-preserves-logicman->mode
+          :rules ((t (:add-concl (equal (logicman->mode (interp-st->logicman new-interp-st))
+                                        (logicman->mode (interp-st->logicman interp-st)))))))
+        (std::defret-generate <fn>-preserves-reclimit
+          :rules ((t (:add-concl (acl2::nat-equiv
+                                  (interp-st->reclimit new-interp-st)
+                                  (interp-st->reclimit interp-st))))))
+        (std::defret-generate <fn>-preserves-reclimit-natp
+          :rules ((t (:add-concl (implies (natp (interp-st->reclimit interp-st))
+                                          (natp (interp-st->reclimit new-interp-st)))))))
+        (std::defret-generate <fn>-preserves-w-state
+          :rules ((t (:add-concl (equal (w new-state) (w state))))))
+        (std::defret-generate <fn>-equiv-contexts-preserved
+          :rules ((t (:add-concl (equal (interp-st->equiv-contexts new-interp-st)
+                                        (interp-st->equiv-contexts interp-st))))))
+        (std::defret-generate <fn>-preserves-errmsg
+          :rules ((t (:add-concl (let ((errmsg (interp-st->errmsg interp-st)))
+                                   (implies errmsg
+                                            (equal (interp-st->errmsg new-interp-st) errmsg)))))))
+        :hints ((fgl-interp-default-hint 'fgl-interp-term id nil world))
+        :mutual-recursion fgl-interp))))
 
 
 (defret pathcond-rewind-stack-len-of-interp-st-pathcond-assume-maybe
@@ -6325,38 +6327,6 @@
       :mutual-recursion fgl-interp)))
 
 
-(defsection-progn fgl-interp-preserves-reclimit
-  (with-output
-    :off (event)
-    :evisc (:gag-mode (evisc-tuple 8 10 nil nil) :term nil)
-    (std::defret-mutual-generate <fn>-preserves-reclimit
-      :rules ((t (:add-concl (acl2::nat-equiv
-                              (interp-st->reclimit new-interp-st)
-                              (interp-st->reclimit interp-st)))
-                 (:add-keyword :hints ('(:do-not-induct t)
-                                       (let ((flag (find-flag-is-hyp clause)))
-                                         (and flag
-                                              (prog2$ (cw "flag: ~x0~%" flag)
-                                                      '(:no-op t))))))))
-      :hints ((fgl-interp-default-hint 'fgl-interp-term id nil world))
-      :mutual-recursion fgl-interp)))
-
-(defsection-progn fgl-interp-preserves-reclimit-natp
-  (with-output
-    :off (event)
-    :evisc (:gag-mode (evisc-tuple 8 10 nil nil) :term nil)
-    (std::defret-mutual-generate <fn>-preserves-reclimit-natp
-      :rules ((t (:add-concl (implies (natp (interp-st->reclimit interp-st))
-                                      (natp (interp-st->reclimit new-interp-st))))
-                 (:add-keyword :hints ('(:do-not-induct t)
-                                       (let ((flag (find-flag-is-hyp clause)))
-                                         (and flag
-                                              (prog2$ (cw "flag: ~x0~%" flag)
-                                                      '(:no-op t))))))))
-      :hints ((fgl-interp-default-hint 'fgl-interp-term id nil world))
-      :mutual-recursion fgl-interp)))
-
-
 (defret return-values-correct-of-interp-st-add-term-bvar-unique
   (equal (list . <values>)
          <call>)
@@ -6382,19 +6352,6 @@
 
 (local (in-theory (disable w)))
 
-(defsection fgl-interp-preserves-w-state
-  (with-output
-    :off (event)
-    :evisc (:gag-mode (evisc-tuple 8 10 nil nil) :term nil)
-    (std::defret-mutual-generate <fn>-preserves-w-state
-      :rules ((t (:add-concl (equal (w new-state) (w state)))
-                 (:add-keyword :hints ('(:do-not-induct t)
-                                       (let ((flag (find-flag-is-hyp clause)))
-                                         (and flag
-                                              (prog2$ (cw "flag: ~x0~%" flag)
-                                                      '(:no-op t))))))))
-      :hints ((fgl-interp-default-hint 'fgl-interp-term id nil world))
-      :mutual-recursion fgl-interp)))
 
 (defsection-progn fgl-interp-scratch-isomorphism-lengths
 
@@ -7213,23 +7170,6 @@
     (make-event
      (defret-mutual-interp-stack-extended '<fn>-stack-bindings-extended-rw nil t))))
 
-(defsection fgl-interp-preserves-equiv-contexts
-  (local (in-theory (enable stack$a-update-scratch-in-terms-of-push-pop)))
-
-  (with-output
-    :off (event)
-    :evisc (:gag-mode (evisc-tuple 8 10 nil nil) :term nil)
-    (std::defret-mutual-generate <fn>-equiv-contexts-preserved
-      :rules ((t (:add-concl (equal (interp-st->equiv-contexts new-interp-st)
-                                    (interp-st->equiv-contexts interp-st)))
-                 (:add-keyword :hints ('(:do-not-induct t)
-                                       (let ((flag (find-flag-is-hyp clause)))
-                                         (and flag
-                                              (prog2$ (cw "flag: ~x0~%" flag)
-                                                      '(:no-op t))))))))
-      :hints ((fgl-interp-default-hint 'fgl-interp-term id nil world))
-      :mutual-recursion fgl-interp)))
-
 
 ;; These return properties depend only on syntax and binding domains.  Keep
 ;; them independent of the interpreter's semantic correctness induction.
@@ -7322,21 +7262,6 @@
       :mutual-recursion fgl-interp
       :skip-others t)))
 
-(defsection fgl-interp-preserves-errmsg
-  (with-output
-    :off (event)
-    :evisc (:gag-mode (evisc-tuple 8 10 nil nil) :term nil)
-    (std::defret-mutual-generate <fn>-preserves-errmsg
-      :rules ((t (:add-concl (let ((errmsg (interp-st->errmsg interp-st)))
-                               (implies errmsg
-                                        (equal (interp-st->errmsg new-interp-st) errmsg))))
-                 (:add-keyword :hints ('(:do-not-induct t)
-                                       (let ((flag (find-flag-is-hyp clause)))
-                                         (and flag
-                                              (prog2$ (cw "flag: ~x0~%" flag)
-                                                      '(:no-op t))))))))
-      :hints ((fgl-interp-default-hint 'fgl-interp-term id nil world))
-      :mutual-recursion fgl-interp)))
 
 (local (defthm alist-keys-subsetp-when-fgl-bindings-extension-p
          (implies (fgl-bindings-extension-p new old)
@@ -9071,12 +8996,13 @@
                              logicman-extension-of-update-1
                              logicman-extension-p-transitive)))
 
-  ;; (local
   (with-output
     :off (event)
     :evisc (:gag-mode (evisc-tuple 8 10 nil nil) :term nil)
     (std::defret-mutual-generate <fn>-bvar-db-ok-doesnt-get-fixed-somehow
 
+      ;; Reject this rule on the old BVAR-DB condition before attempting the
+      ;; more expensive BFR well-formedness hypotheses.
       :formal-hyps (((interp-st-bfr-p x)           (interp-st-bfr-p x))
                     ((fgl-object-p x)               (fgl-object-bfrs-ok x (interp-st-bfrstate)))
                     ((fgl-objectlist-p x)           (fgl-objectlist-bfrs-ok x (interp-st-bfrstate)))
@@ -9085,8 +9011,7 @@
                     (interp-st                     (interp-st-bfrs-ok interp-st))
                     ((constraint-instancelist-p x) (constraint-instancelist-bfrs-ok x (interp-st-bfrstate))))
 
-      :rules ((t (:add-concl (implies (not (interp-st-bvar-db-ok interp-st env))
-                                      (not (interp-st-bvar-db-ok new-interp-st env))))
+      :rules ((t (:add-concl (not (interp-st-bvar-db-ok new-interp-st env)))
                  (:add-keyword :hints ('(:do-not-induct t)
                                        (let ((flag (find-flag-is-hyp clause)))
                                          (and flag
@@ -9097,7 +9022,9 @@
                    (:fnname fgl-rewrite-try-rewrite)
                    (:fnname fgl-rewrite-try-meta)
                    (:fnname fgl-rewrite-try-rules3))
-               (:add-hyp (scratchobj-case (stack$a-top-scratch (interp-st->stack interp-st)) :fgl-arglist))))
+               (:add-hyp (scratchobj-case (stack$a-top-scratch (interp-st->stack interp-st)) :fgl-arglist)))
+              ;; ADD-HYP prepends hypotheses, so put this rule last.
+              (t (:add-hyp (not (interp-st-bvar-db-ok interp-st env)))))
 
       :hints ((fgl-interp-default-hint 'fgl-interp-term id nil world))
       :mutual-recursion fgl-interp)))
